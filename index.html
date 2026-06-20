@@ -420,25 +420,52 @@ updateDate();
 frameCtr.textContent = `EXP. ${frameCount}/24`;
 
 // ── CAMERA ────────────────────────────────────────────
-async function startCamera(){
+const wait = ms => new Promise(r=>setTimeout(r,ms));
+
+// Tenta abrir a câmera com fallback progressivo. Vários Androids não aceitam
+// as mesmas constraints do iOS, então degradamos até `video:true`. Também
+// repetimos quando a câmera ainda está "ocupada" logo após trocar de lente.
+async function getStream(fm){
+  const tries = [
+    { facingMode:{ ideal:fm }, width:{ideal:1280}, height:{ideal:720} },
+    { facingMode:{ ideal:fm } },
+    { facingMode: fm },
+    true
+  ];
+  let lastErr;
+  for (const v of tries){
+    for (let n=0; n<2; n++){
+      try { return await navigator.mediaDevices.getUserMedia({ video:v, audio:false }); }
+      catch(e){
+        lastErr = e;
+        if (e && (e.name==='NotReadableError' || e.name==='AbortError')){ await wait(350); }
+        else break;
+      }
+    }
+  }
+  throw lastErr;
+}
+
+async function startCamera(opts={}){
+  // No Android o hardware muitas vezes só roda uma lente por vez, então
+  // liberamos a câmera atual ANTES de pedir a nova.
+  if (stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
   try {
-    if (stream) stream.getTracks().forEach(t=>t.stop());
-    // Pedimos resolução landscape nativa (FOV completo). O recorte para o
-    // formato vertical do visor é feito no canvas — assim a câmera frontal
-    // não fica com aquele zoom absurdo causado por forçar aspecto retrato.
-    stream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:{ ideal:facingMode }, width:{ideal:1280}, height:{ideal:720} }, audio:false
-    });
+    stream = await getStream(facingMode);
     video.srcObject = stream;
     await video.play();
     permScr.classList.add('hidden');
     resizeCanvas();
     if(rafId) cancelAnimationFrame(rafId);
     renderLoop();
+    return true;
   } catch(e) {
-    permScr.classList.remove('hidden');
-    document.querySelector('#permission-screen p').textContent =
-      'Câmera não acessível. Verifique as permissões e tente novamente.';
+    if (!opts.silent){
+      permScr.classList.remove('hidden');
+      document.querySelector('#permission-screen p').textContent =
+        'Câmera não acessível. Verifique as permissões e tente novamente.';
+    }
+    return false;
   }
 }
 
@@ -653,9 +680,20 @@ document.getElementById('filter-panel-close').addEventListener('click',()=>{
 
 // ── FLIP CAMERA ───────────────────────────────────────────────────────────────
 const flipBtn = document.getElementById('flip-btn');
-flipBtn.addEventListener('click',()=>{
+let flipping = false;
+flipBtn.addEventListener('click', async ()=>{
+  if (flipping) return;
+  flipping = true;
+  const prev = facingMode;
   facingMode = facingMode==='environment' ? 'user' : 'environment';
-  startCamera();
+  const ok = await startCamera({ silent:true });
+  if (!ok){
+    // A outra lente não abriu — volta para a que funcionava.
+    facingMode = prev;
+    await startCamera({ silent:true });
+    alert('Não foi possível abrir a outra câmera neste dispositivo.');
+  }
+  flipping = false;
 });
 
 // ── ADJUST PANEL ─────────────────────────────────────
