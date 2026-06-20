@@ -126,6 +126,26 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
 .f-name { font-size:7.5px; letter-spacing:.6px; color:#7a6e5f; padding:6px 0 0; text-align:center; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .f-card.active .f-name { color:#e8c178; }
 
+/* PHOTO EDITOR */
+#photo-editor { position:fixed; inset:0; background:#0a0908; z-index:250; display:none; flex-direction:column; }
+#photo-editor.show { display:flex; }
+#pe-top { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; flex-shrink:0; }
+#pe-title { font-size:11px; letter-spacing:2px; color:#e8c178; }
+#pe-cancel { font-size:22px; color:#9c9285; cursor:pointer; padding:2px 6px; line-height:1; }
+#pe-save { font-size:12px; letter-spacing:2px; color:#e8c178; font-weight:bold; cursor:pointer; padding:5px 10px; border:1px solid rgba(232,193,120,.4); border-radius:3px; }
+#pe-save:active { background:rgba(232,193,120,.12); }
+#pe-stage { flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; padding:8px 16px; }
+#pe-imgwrap { position:relative; line-height:0; transition:transform .2s ease; }
+#pe-img { max-width:78vmin; max-height:78vmin; display:block; }
+.pe-ov { position:absolute; inset:0; pointer-events:none; }
+#pe-vig { opacity:0; background:radial-gradient(ellipse at center, rgba(0,0,0,0) 38%, rgba(0,0,0,1) 135%); }
+#pe-warm { background:transparent; }
+#pe-grain { opacity:0; mix-blend-mode:overlay; background-size:100px 100px; }
+#pe-controls { flex-shrink:0; padding:12px 18px 22px; background:#11100d; border-top:1px solid rgba(255,255,255,.06); display:flex; flex-direction:column; gap:7px; }
+.pe-actions-row { display:flex; gap:10px; margin-top:4px; }
+.pe-act { flex:1; text-align:center; font-size:9px; letter-spacing:1.5px; color:#9c9285; padding:8px; background:#1d1812; border:1px solid #3a3225; border-radius:3px; cursor:pointer; }
+.pe-act:active { background:#2a2318; color:#e8c178; }
+
 @keyframes flashpop { 0%{opacity:.85} 100%{opacity:0} }
 @keyframes countIn { 0%{transform:scale(1.4);opacity:0} 30%{opacity:1} 100%{transform:scale(1);opacity:.85} }
 </style>
@@ -237,9 +257,39 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
   <div id="viewer-bottombar">
     <div id="viewer-filter-name">—</div>
     <div class="viewer-actions">
+      <div class="viewer-action" id="viewer-edit"><div class="icon">✎</div><span>EDITAR</span></div>
       <div class="viewer-action" id="viewer-delete"><div class="icon">🗑</div><span>DELETAR</span></div>
       <div class="viewer-action" id="viewer-share"><div class="icon">↗</div><span>SHARE</span></div>
       <div class="viewer-action" id="viewer-dl"><div class="icon">↓</div><span>SALVAR</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Photo Editor -->
+<div id="photo-editor">
+  <div id="pe-top">
+    <div id="pe-cancel">✕</div>
+    <div id="pe-title">EDITAR</div>
+    <div id="pe-save">SALVAR</div>
+  </div>
+  <div id="pe-stage">
+    <div id="pe-imgwrap">
+      <img id="pe-img" alt="">
+      <div class="pe-ov" id="pe-warm"></div>
+      <div class="pe-ov" id="pe-vig"></div>
+      <div class="pe-ov" id="pe-grain"></div>
+    </div>
+  </div>
+  <div id="pe-controls">
+    <div class="slider-row"><div class="slider-label">BRILHO</div><div class="slider-track"><input type="range" id="pe-bri" min="40" max="180" value="100"></div><div class="slider-val" id="pe-bri-v">0</div></div>
+    <div class="slider-row"><div class="slider-label">CONTRASTE</div><div class="slider-track"><input type="range" id="pe-con" min="40" max="180" value="100"></div><div class="slider-val" id="pe-con-v">0</div></div>
+    <div class="slider-row"><div class="slider-label">SATURAÇÃO</div><div class="slider-track"><input type="range" id="pe-sat" min="0" max="300" value="100"></div><div class="slider-val" id="pe-sat-v">0</div></div>
+    <div class="slider-row"><div class="slider-label">CALOR</div><div class="slider-track"><input type="range" id="pe-warm-s" min="-100" max="100" value="0"></div><div class="slider-val" id="pe-warm-v">0</div></div>
+    <div class="slider-row"><div class="slider-label">VINHETA</div><div class="slider-track"><input type="range" id="pe-vig-s" min="0" max="100" value="0"></div><div class="slider-val" id="pe-vig-v">0</div></div>
+    <div class="slider-row"><div class="slider-label">GRÃO</div><div class="slider-track"><input type="range" id="pe-grain-s" min="0" max="100" value="0"></div><div class="slider-val" id="pe-grain-v">0</div></div>
+    <div class="pe-actions-row">
+      <div class="pe-act" id="pe-rotate">⟳ GIRAR</div>
+      <div class="pe-act" id="pe-reset">↺ RESET</div>
     </div>
   </div>
 </div>
@@ -817,6 +867,123 @@ wrap.addEventListener('touchend',e=>{
   if (dx<0 && viewerIdx<photos.length-1){ viewerIdx++; refreshViewer(); }
   else if (dx>0 && viewerIdx>0){ viewerIdx--; refreshViewer(); }
 },{passive:true});
+
+// ── PHOTO EDITOR ──────────────────────────────────────
+const editor   = document.getElementById('photo-editor');
+const peImg     = document.getElementById('pe-img');
+const peImgWrap = document.getElementById('pe-imgwrap');
+const peWarmOv  = document.getElementById('pe-warm');
+const peVigOv   = document.getElementById('pe-vig');
+const peGrainOv = document.getElementById('pe-grain');
+const vEdit     = document.getElementById('viewer-edit');
+
+// Tile de ruído reutilizável (preview + bake)
+const NOISE = (()=>{
+  const n=document.createElement('canvas'); n.width=n.height=100;
+  const nx=n.getContext('2d'); const id=nx.createImageData(100,100); const d=id.data;
+  for(let i=0;i<d.length;i+=4){ const v=Math.random()*255|0; d[i]=d[i+1]=d[i+2]=v; d[i+3]=255; }
+  nx.putImageData(id,0,0); return n;
+})();
+peGrainOv.style.backgroundImage = `url(${NOISE.toDataURL()})`;
+
+let peAdj = { bri:1, con:1, sat:1, warm:0, vig:0, grain:0, rot:0 };
+const PE = {
+  bri:  { s:document.getElementById('pe-bri'),    v:document.getElementById('pe-bri-v')   },
+  con:  { s:document.getElementById('pe-con'),    v:document.getElementById('pe-con-v')   },
+  sat:  { s:document.getElementById('pe-sat'),    v:document.getElementById('pe-sat-v')   },
+  warm: { s:document.getElementById('pe-warm-s'), v:document.getElementById('pe-warm-v')  },
+  vig:  { s:document.getElementById('pe-vig-s'),  v:document.getElementById('pe-vig-v')   },
+  grain:{ s:document.getElementById('pe-grain-s'),v:document.getElementById('pe-grain-v') },
+};
+
+function pePreview(){
+  peImg.style.filter = `brightness(${peAdj.bri}) contrast(${peAdj.con}) saturate(${peAdj.sat})`;
+  peImgWrap.style.transform = `rotate(${peAdj.rot}deg)`;
+  const w=peAdj.warm, wa=Math.abs(w)/100*0.4;
+  peWarmOv.style.background = w>0?`rgba(255,150,40,${wa})` : w<0?`rgba(40,120,255,${wa})` : 'transparent';
+  peVigOv.style.opacity   = peAdj.vig/100*0.85;
+  peGrainOv.style.opacity = peAdj.grain/100*0.5;
+}
+
+function peSyncLabels(){
+  PE.bri.v.textContent   = (PE.bri.s.value-100>=0?'+':'')+(PE.bri.s.value-100);
+  PE.con.v.textContent   = (PE.con.s.value-100>=0?'+':'')+(PE.con.s.value-100);
+  PE.sat.v.textContent   = (PE.sat.s.value-100>=0?'+':'')+(PE.sat.s.value-100);
+  PE.warm.v.textContent  = (PE.warm.s.value>=0?'+':'')+PE.warm.s.value;
+  PE.vig.v.textContent   = '+'+PE.vig.s.value;
+  PE.grain.v.textContent = '+'+PE.grain.s.value;
+}
+
+PE.bri.s.addEventListener('input',  e=>{ peAdj.bri=+e.target.value/100; peSyncLabels(); pePreview(); });
+PE.con.s.addEventListener('input',  e=>{ peAdj.con=+e.target.value/100; peSyncLabels(); pePreview(); });
+PE.sat.s.addEventListener('input',  e=>{ peAdj.sat=+e.target.value/100; peSyncLabels(); pePreview(); });
+PE.warm.s.addEventListener('input', e=>{ peAdj.warm=+e.target.value;    peSyncLabels(); pePreview(); });
+PE.vig.s.addEventListener('input',  e=>{ peAdj.vig=+e.target.value;     peSyncLabels(); pePreview(); });
+PE.grain.s.addEventListener('input',e=>{ peAdj.grain=+e.target.value;   peSyncLabels(); pePreview(); });
+
+document.getElementById('pe-rotate').addEventListener('click',()=>{ peAdj.rot=(peAdj.rot+90)%360; pePreview(); });
+document.getElementById('pe-reset').addEventListener('click',()=>{
+  peAdj={ bri:1, con:1, sat:1, warm:0, vig:0, grain:0, rot:0 };
+  PE.bri.s.value=100; PE.con.s.value=100; PE.sat.s.value=100;
+  PE.warm.s.value=0; PE.vig.s.value=0; PE.grain.s.value=0;
+  peSyncLabels(); pePreview();
+});
+
+function openEditor(){
+  const p=photos[viewerIdx]; if(!p) return;
+  peAdj={ bri:1, con:1, sat:1, warm:0, vig:0, grain:0, rot:0 };
+  PE.bri.s.value=100; PE.con.s.value=100; PE.sat.s.value=100;
+  PE.warm.s.value=0; PE.vig.s.value=0; PE.grain.s.value=0;
+  peSyncLabels();
+  peImg.onload=pePreview;
+  peImg.src=p.src;
+  pePreview();
+  editor.classList.add('show');
+}
+
+function bakeEdit(srcImg){
+  const r=((peAdj.rot%360)+360)%360, swap=(r===90||r===270);
+  const iw=srcImg.naturalWidth, ih=srcImg.naturalHeight;
+  const cw=swap?ih:iw, ch=swap?iw:ih;
+  const c=document.createElement('canvas'); c.width=cw; c.height=ch;
+  const x=c.getContext('2d');
+  x.save();
+  x.translate(cw/2,ch/2); x.rotate(r*Math.PI/180);
+  x.filter=`brightness(${peAdj.bri}) contrast(${peAdj.con}) saturate(${peAdj.sat})`;
+  x.drawImage(srcImg,-iw/2,-ih/2);
+  x.restore();
+  x.filter='none';
+  if(peAdj.warm!==0){
+    const a=Math.abs(peAdj.warm)/100*0.4;
+    x.fillStyle = peAdj.warm>0?`rgba(255,150,40,${a})`:`rgba(40,120,255,${a})`;
+    x.fillRect(0,0,cw,ch);
+  }
+  if(peAdj.vig>0){
+    const g=x.createRadialGradient(cw/2,ch/2,Math.min(cw,ch)*0.32,cw/2,ch/2,Math.max(cw,ch)*0.72);
+    g.addColorStop(0,'rgba(0,0,0,0)');
+    g.addColorStop(1,`rgba(0,0,0,${peAdj.vig/100*0.85})`);
+    x.fillStyle=g; x.fillRect(0,0,cw,ch);
+  }
+  if(peAdj.grain>0){
+    x.globalAlpha=peAdj.grain/100*0.5;
+    x.globalCompositeOperation='overlay';
+    x.fillStyle=x.createPattern(NOISE,'repeat');
+    x.fillRect(0,0,cw,ch);
+    x.globalCompositeOperation='source-over'; x.globalAlpha=1;
+  }
+  return c.toDataURL('image/jpeg',.92);
+}
+
+document.getElementById('pe-save').addEventListener('click',()=>{
+  const p=photos[viewerIdx]; if(!p) return;
+  const data=bakeEdit(peImg);
+  photos[viewerIdx].src=data;
+  try { sessionStorage.setItem('retrocam-photos', JSON.stringify(photos.slice(0,60))); } catch(e){}
+  renderGallery(); refreshViewer();
+  editor.classList.remove('show');
+});
+document.getElementById('pe-cancel').addEventListener('click',()=>editor.classList.remove('show'));
+vEdit.addEventListener('click', openEditor);
 
 // ── INIT ──────────────────────────────────────────────
 renderGallery();
