@@ -112,15 +112,19 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
 #permission-screen.hidden { display:none; }
 
 /* FILTER PANEL */
-#filter-panel { background:#111009; border-top:1px solid rgba(255,255,255,.05); overflow:hidden; max-height:0; transition:max-height .3s ease; z-index:20; flex-shrink:0; }
-#filter-panel.open { max-height:260px; }
-#filter-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding:10px 14px; overflow-y:auto; max-height:250px; }
-.f-card { padding:8px 6px; background:#1a1510; border:1px solid #2c2519; border-radius:3px; text-align:center; cursor:pointer; transition:all .15s; }
-.f-card.active { background:#e8c178; border-color:#e8c178; }
-.f-card.active .f-name { color:#1a1410; }
-.f-swatch { width:100%; height:22px; border-radius:2px; margin-bottom:5px; }
-.f-name { font-size:7.5px; letter-spacing:.8px; color:#9c9285; }
-.f-card.active .f-name { color:#1a1410; font-weight:bold; }
+#filter-panel { background:#0e0c08; border-top:1px solid rgba(255,255,255,.08); overflow:hidden; max-height:0; transition:max-height .35s cubic-bezier(.4,0,.2,1); z-index:20; flex-shrink:0; }
+#filter-panel.open { max-height:280px; }
+#filter-panel-header { display:flex; align-items:center; justify-content:space-between; padding:10px 14px 4px; }
+#filter-panel-title { font-size:9px; letter-spacing:2px; color:#5a5040; }
+#filter-panel-close { font-size:11px; color:#4a4035; cursor:pointer; padding:2px 6px; }
+#filter-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; padding:4px 14px 14px; overflow-y:auto; max-height:240px; }
+.f-card { background:#18140f; border:1px solid #252015; border-radius:4px; overflow:hidden; cursor:pointer; transition:all .18s; position:relative; }
+.f-card:active { transform:scale(.96); }
+.f-card.active { border-color:#e8c178; }
+.f-card.active::after { content:'✓'; position:absolute; top:3px; right:4px; font-size:8px; color:#e8c178; }
+.f-swatch { width:100%; height:36px; }
+.f-name { font-size:7px; letter-spacing:.9px; color:#7a6e5f; padding:4px 3px 5px; text-align:center; line-height:1; }
+.f-card.active .f-name { color:#e8c178; }
 
 @keyframes flashpop { 0%{opacity:.85} 100%{opacity:0} }
 @keyframes countIn { 0%{transform:scale(1.4);opacity:0} 30%{opacity:1} 100%{transform:scale(1);opacity:.85} }
@@ -150,6 +154,10 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
   </div>
 
   <div id="filter-panel">
+    <div id="filter-panel-header">
+      <span id="filter-panel-title">FILTROS</span>
+      <span id="filter-panel-close">✕</span>
+    </div>
     <div id="filter-grid"></div>
   </div>
 
@@ -202,7 +210,8 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
     <div class="ctrl-btn" id="timer-btn">⏱</div>
     <div id="shutter"></div>
     <div class="ctrl-btn" id="adjust-btn">⊿</div>
-    <div class="ctrl-btn" id="filter-btn">🎞</div>
+    <div class="ctrl-btn" id="flip-btn">⟲</div>
+    <div class="ctrl-btn" id="filter-btn">⬡</div>
   </div>
 
 </div>
@@ -574,8 +583,20 @@ filterBtn.addEventListener('click',()=>{
   filterPanel.classList.toggle('open',filterOpen);
   filterBtn.style.color=filterOpen?'#e8c178':'';
   if(filterOpen) buildFilterGrid();
-  // close adjust if open
   if(filterOpen && adjOpen){ adjOpen=false; adjPanel.classList.remove('open'); adjBtn.classList.remove('active-mode'); }
+});
+
+document.getElementById('filter-panel-close').addEventListener('click',()=>{
+  filterOpen=false;
+  filterPanel.classList.remove('open');
+  filterBtn.style.color='';
+});
+
+// ── FLIP CAMERA ───────────────────────────────────────────────────────────────
+const flipBtn = document.getElementById('flip-btn');
+flipBtn.addEventListener('click',()=>{
+  facingMode = facingMode==='environment' ? 'user' : 'environment';
+  startCamera();
 });
 
 // ── ADJUST PANEL ─────────────────────────────────────
