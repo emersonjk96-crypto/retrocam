@@ -111,19 +111,19 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
 #grant-btn { padding:12px 28px; background:#e8c178; color:#1a1410; font-weight:bold; border-radius:3px; letter-spacing:1.5px; font-size:12px; cursor:pointer; }
 #permission-screen.hidden { display:none; }
 
-/* FILTER PANEL */
-#filter-panel { background:#0e0c08; border-top:1px solid rgba(255,255,255,.08); overflow:hidden; max-height:0; transition:max-height .35s cubic-bezier(.4,0,.2,1); z-index:20; flex-shrink:0; }
-#filter-panel.open { max-height:280px; }
-#filter-panel-header { display:flex; align-items:center; justify-content:space-between; padding:10px 14px 4px; }
+/* FILTER PANEL — carrossel horizontal compacto */
+#filter-panel { background:#0e0c08; border-top:1px solid rgba(255,255,255,.08); overflow:hidden; max-height:0; transition:max-height .3s cubic-bezier(.4,0,.2,1); z-index:20; flex-shrink:0; }
+#filter-panel.open { max-height:124px; }
+#filter-panel-header { display:flex; align-items:center; justify-content:space-between; padding:9px 16px 3px; }
 #filter-panel-title { font-size:9px; letter-spacing:2px; color:#5a5040; }
-#filter-panel-close { font-size:11px; color:#4a4035; cursor:pointer; padding:2px 6px; }
-#filter-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; padding:4px 14px 14px; overflow-y:auto; max-height:240px; }
-.f-card { background:#18140f; border:1px solid #252015; border-radius:4px; overflow:hidden; cursor:pointer; transition:all .18s; position:relative; }
-.f-card:active { transform:scale(.96); }
-.f-card.active { border-color:#e8c178; }
-.f-card.active::after { content:'✓'; position:absolute; top:3px; right:4px; font-size:8px; color:#e8c178; }
-.f-swatch { width:100%; height:36px; }
-.f-name { font-size:7px; letter-spacing:.9px; color:#7a6e5f; padding:4px 3px 5px; text-align:center; line-height:1; }
+#filter-panel-close { font-size:13px; color:#6b6256; cursor:pointer; padding:2px 6px; line-height:1; }
+#filter-grid { display:flex; gap:11px; padding:6px 16px 12px; overflow-x:auto; overflow-y:hidden; scroll-snap-type:x proximity; -webkit-overflow-scrolling:touch; }
+#filter-grid::-webkit-scrollbar { display:none; }
+.f-card { flex:0 0 auto; width:60px; background:transparent; border:none; cursor:pointer; scroll-snap-align:center; transition:transform .12s; }
+.f-card:active { transform:scale(.93); }
+.f-swatch { width:60px; height:60px; border-radius:12px; border:2px solid rgba(255,255,255,.06); box-sizing:border-box; transition:border-color .15s,box-shadow .15s; }
+.f-card.active .f-swatch { border-color:#e8c178; box-shadow:0 0 0 1px #e8c178,0 0 12px rgba(232,193,120,.45); }
+.f-name { font-size:7.5px; letter-spacing:.6px; color:#7a6e5f; padding:6px 0 0; text-align:center; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .f-card.active .f-name { color:#e8c178; }
 
 @keyframes flashpop { 0%{opacity:.85} 100%{opacity:0} }
@@ -373,8 +373,11 @@ frameCtr.textContent = `EXP. ${frameCount}/24`;
 async function startCamera(){
   try {
     if (stream) stream.getTracks().forEach(t=>t.stop());
+    // Pedimos resolução landscape nativa (FOV completo). O recorte para o
+    // formato vertical do visor é feito no canvas — assim a câmera frontal
+    // não fica com aquele zoom absurdo causado por forçar aspecto retrato.
     stream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode, width:{ideal:1280}, height:{ideal:1706} }, audio:false
+      video:{ facingMode:{ ideal:facingMode }, width:{ideal:1280}, height:{ideal:720} }, audio:false
     });
     video.srcObject = stream;
     await video.play();
@@ -572,17 +575,23 @@ function buildFilterGrid(){
       currentFilter=key;
       document.querySelectorAll('.f-card').forEach(x=>x.classList.remove('active'));
       card.classList.add('active');
+      card.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});
     });
     filterGrid.appendChild(card);
   });
 }
 buildFilterGrid();
 
+function centerActiveFilter(){
+  const a=filterGrid.querySelector('.f-card.active');
+  if(a) a.scrollIntoView({behavior:'auto',inline:'center',block:'nearest'});
+}
+
 filterBtn.addEventListener('click',()=>{
   filterOpen=!filterOpen;
   filterPanel.classList.toggle('open',filterOpen);
   filterBtn.style.color=filterOpen?'#e8c178':'';
-  if(filterOpen) buildFilterGrid();
+  if(filterOpen){ buildFilterGrid(); requestAnimationFrame(centerActiveFilter); }
   if(filterOpen && adjOpen){ adjOpen=false; adjPanel.classList.remove('open'); adjBtn.classList.remove('active-mode'); }
 });
 
