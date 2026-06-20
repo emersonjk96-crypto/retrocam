@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>RETROCAM</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0908">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RetroCam">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
 html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-family:'Courier New',monospace; color:#e8dfc8; }
@@ -36,11 +42,7 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
 #countdown-overlay.show { display:flex; }
 #countdown-num { font-size:110px; font-weight:bold; color:#e8c178; text-shadow:0 0 50px rgba(232,193,120,.9),0 2px 10px rgba(0,0,0,.9); letter-spacing:-4px; }
 
-/* FILM STRIP */
-#filmstrip { display:flex; gap:8px; padding:10px 14px; overflow-x:auto; background:#14110d; border-top:1px solid rgba(255,255,255,.06); border-bottom:1px solid rgba(255,255,255,.04); z-index:20; scrollbar-width:none; flex-shrink:0; }
-#filmstrip::-webkit-scrollbar { display:none; }
-.film-chip { flex:0 0 auto; padding:6px 13px; font-size:10.5px; letter-spacing:1.2px; color:#9c9285; background:#1d1812; border:1px solid #2c2519; border-radius:2px; white-space:nowrap; cursor:pointer; transition:all .15s; }
-.film-chip.active { color:#1a1410; background:#e8c178; border-color:#e8c178; font-weight:bold; }
+/* FILM STRIP removed - now filter panel */
 
 /* ADJUST PANEL */
 #adjust-panel { background:#11100d; border-top:1px solid rgba(255,255,255,.05); overflow:hidden; max-height:0; transition:max-height .28s ease; z-index:20; flex-shrink:0; }
@@ -109,6 +111,17 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
 #grant-btn { padding:12px 28px; background:#e8c178; color:#1a1410; font-weight:bold; border-radius:3px; letter-spacing:1.5px; font-size:12px; cursor:pointer; }
 #permission-screen.hidden { display:none; }
 
+/* FILTER PANEL */
+#filter-panel { background:#111009; border-top:1px solid rgba(255,255,255,.05); overflow:hidden; max-height:0; transition:max-height .3s ease; z-index:20; flex-shrink:0; }
+#filter-panel.open { max-height:260px; }
+#filter-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding:10px 14px; overflow-y:auto; max-height:250px; }
+.f-card { padding:8px 6px; background:#1a1510; border:1px solid #2c2519; border-radius:3px; text-align:center; cursor:pointer; transition:all .15s; }
+.f-card.active { background:#e8c178; border-color:#e8c178; }
+.f-card.active .f-name { color:#1a1410; }
+.f-swatch { width:100%; height:22px; border-radius:2px; margin-bottom:5px; }
+.f-name { font-size:7.5px; letter-spacing:.8px; color:#9c9285; }
+.f-card.active .f-name { color:#1a1410; font-weight:bold; }
+
 @keyframes flashpop { 0%{opacity:.85} 100%{opacity:0} }
 @keyframes countIn { 0%{transform:scale(1.4);opacity:0} 30%{opacity:1} 100%{transform:scale(1);opacity:.85} }
 </style>
@@ -136,20 +149,8 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
     <div id="countdown-overlay"><div id="countdown-num">3</div></div>
   </div>
 
-  <div id="filmstrip">
-    <div class="film-chip active" data-filter="kodak">KODAK '78</div>
-    <div class="film-chip" data-filter="polaroid">POLAROID</div>
-    <div class="film-chip" data-filter="vhs">VHS CAM</div>
-    <div class="film-chip" data-filter="super8">SUPER 8</div>
-    <div class="film-chip" data-filter="disposable">DISPOSABLE</div>
-    <div class="film-chip" data-filter="cinestill">CINESTILL</div>
-    <div class="film-chip" data-filter="lomo">LOMO LC-A</div>
-    <div class="film-chip" data-filter="cross">CROSS PROC</div>
-    <div class="film-chip" data-filter="sepia">SEPIA</div>
-    <div class="film-chip" data-filter="noir">NOIR</div>
-    <div class="film-chip" data-filter="daguerro">DAGUERRO</div>
-    <div class="film-chip" data-filter="infrared">INFRARED</div>
-    <div class="film-chip" data-filter="natural">NATURAL</div>
+  <div id="filter-panel">
+    <div id="filter-grid"></div>
   </div>
 
   <div id="adjust-panel">
@@ -179,6 +180,19 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
         <div class="slider-track"><input type="range" id="sl-vig" min="0" max="100" value="0"></div>
         <div class="slider-val" id="vl-vig">+0</div>
       </div>
+      <div class="slider-row">
+        <div class="slider-label">ZOOM</div>
+        <div class="slider-track"><input type="range" id="sl-zoom" min="50" max="200" value="100"></div>
+        <div class="slider-val" id="vl-zoom">1.0x</div>
+      </div>
+      <div class="slider-row">
+        <div class="slider-label">ESPELHAR</div>
+        <div class="slider-track" style="display:flex;align-items:center;gap:8px">
+          <div id="mirror-toggle" style="padding:4px 12px;background:#1d1812;border:1px solid #3a3225;border-radius:2px;font-size:9px;letter-spacing:1px;color:#9c9285;cursor:pointer">OFF</div>
+          <span style="font-size:9px;color:#4a4035">foto espelhada</span>
+        </div>
+        <div class="slider-val" style="width:34px"></div>
+      </div>
       <div id="adjust-reset">↺ RESET</div>
     </div>
   </div>
@@ -188,7 +202,7 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
     <div class="ctrl-btn" id="timer-btn">⏱</div>
     <div id="shutter"></div>
     <div class="ctrl-btn" id="adjust-btn">⊿</div>
-    <div class="ctrl-btn" id="flip-btn">⟲</div>
+    <div class="ctrl-btn" id="filter-btn">🎞</div>
   </div>
 
 </div>
@@ -250,7 +264,7 @@ const dateEl  = document.getElementById('date-stamp');
 const frameCtr= document.getElementById('frame-counter');
 const flashEl = document.getElementById('flash-overlay');
 const shutter = document.getElementById('shutter');
-const flipBtn = document.getElementById('flip-btn');
+// flipBtn removed
 const galBtn  = document.getElementById('gallery-btn');
 const galTab  = document.getElementById('gallery-tab');
 const closeGal= document.getElementById('close-gallery');
@@ -262,7 +276,7 @@ const saveBtn = document.getElementById('save-btn');
 const backBtn = document.getElementById('back-btn');
 const permScr = document.getElementById('permission-screen');
 const grantBtn= document.getElementById('grant-btn');
-const chips   = document.querySelectorAll('.film-chip');
+// chips removed - now using filter panel
 const adjPanel= document.getElementById('adjust-panel');
 const adjBtn  = document.getElementById('adjust-btn');
 const timerBtn= document.getElementById('timer-btn');
@@ -298,7 +312,9 @@ let adjOpen       = false;
 let viewerIdx     = 0;
 let lastCapture   = null;
 let lastFilterName= '';
-let adj = { exp:1, con:1, sat:1, grain:0, vig:0 };
+let mirrorCapture = false;
+let filterOpen    = false;
+let adj = { exp:1, con:1, sat:1, grain:0, vig:0, zoom:1.0 };
 let photos = [];
 try { photos = JSON.parse(sessionStorage.getItem('retrocam-photos') || '[]'); } catch(e){}
 let frameCount = 24 - (photos.length % 24) || 24;
@@ -327,6 +343,12 @@ const F = {
   daguerro:   { name:"DAGUERRO",     b:.82, c:1.55,s:0,   sp:.18,h:0,   gs:1, grain:.04, vig:.65, leak:null,    scan:0,    tint:[140,175,210,.07] },
   infrared:   { name:"INFRARED",     b:1.20,c:1.50,s:3.0, sp:0,  h:-60, gs:1, grain:.06, vig:.30, leak:null,    scan:0,    tint:[240,235,210,.03] },
   natural:    { name:"NATURAL",      b:1,   c:1,   s:1,   sp:0,  h:0,   gs:0, grain:0,   vig:0,   leak:null,    scan:0,    tint:null },
+  expired:    { name:"EXPIRED",      b:.85, c:1.1, s:.70, sp:.30,h:15,  gs:0, grain:.18, vig:.55, leak:'warm',  scan:0,    tint:[255,140,0,.12] },
+  velvia:     { name:"VELVIA",       b:1.05,c:1.35,s:2.2, sp:0,  h:8,   gs:0, grain:.02, vig:.20, leak:null,    scan:0,    tint:[0,30,80,.04] },
+  portrait:   { name:"PORTRAIT",     b:1.08,c:.95, s:.75, sp:.08,h:5,   gs:0, grain:.03, vig:.15, leak:null,    scan:0,    tint:[255,200,170,.06] },
+  holga:      { name:"HOLGA",        b:.90, c:1.10,s:.70, sp:.10,h:0,   gs:0, grain:.16, vig:.75, leak:null,    scan:0,    tint:[200,180,150,.05] },
+  cyanotype:  { name:"CYANOTYPE",    b:.85, c:1.25,s:0,   sp:0,  h:200, gs:.6,grain:.04, vig:.40, leak:null,    scan:0,    tint:[30,80,140,.15] },
+  bleach:     { name:"BLEACH",       b:1.0, c:1.60,s:.25, sp:0,  h:0,   gs:0, grain:.08, vig:.35, leak:null,    scan:0,    tint:[220,220,210,.06] },
 };
 
 // ── DATE STAMP ────────────────────────────────────────
@@ -476,11 +498,12 @@ function renderLoop(){
     const vw = video.videoWidth, vh = video.videoHeight;
     const cw = canvas.width,     ch = canvas.height;
 
-    // Cover crop
+    // Cover crop with zoom factor
     const vR = vw/vh, cR = cw/ch;
     let sx,sy,sw,sh;
-    if (vR>cR){ sh=vh; sw=vh*cR; sy=0; sx=(vw-sw)/2; }
-    else       { sw=vw; sh=vw/cR; sx=0; sy=(vh-sh)/2; }
+    const zf = adj.zoom || 1.0;
+    if (vR>cR){ sh=Math.min(vh,vh/zf); sw=sh*cR; sy=(vh-sh)/2; sx=(vw-sw)/2; }
+    else       { sw=Math.min(vw,vw/zf); sh=sw/cR; sx=(vw-sw)/2; sy=(vh-sh)/2; }
 
     ctx.save();
     ctx.filter = buildCSS(f);
@@ -517,16 +540,42 @@ function renderLoop(){
 }
 
 // ── FILTER SELECT ─────────────────────────────────────
-chips.forEach(c => c.addEventListener('click',()=>{
-  chips.forEach(x=>x.classList.remove('active'));
-  c.classList.add('active');
-  currentFilter = c.dataset.filter;
-}));
+// ── FILTER PANEL ──────────────────────────────────────────────────────────────
+const filterPanel = document.getElementById('filter-panel');
+const filterGrid  = document.getElementById('filter-grid');
+const filterBtn   = document.getElementById('filter-btn');
 
-// ── FLIP ──────────────────────────────────────────────
-flipBtn.addEventListener('click',()=>{
-  facingMode = facingMode==='environment' ? 'user' : 'environment';
-  startCamera();
+const swatchColors = {
+  kodak:'#d4a055',polaroid:'#f5f0e0',vhs:'#4488ff',super8:'#c87820',
+  disposable:'#88cc88',cinestill:'#1a2060',lomo:'#cc0060',cross:'#8840cc',
+  sepia:'#7a5020',noir:'#303030',daguerro:'#607090',infrared:'#c8d0a0',
+  natural:'#808080',expired:'#a06010',velvia:'#2244cc',portrait:'#e8b090',
+  holga:'#504030',cyanotype:'#204080',bleach:'#d0d0c8'
+};
+
+function buildFilterGrid(){
+  filterGrid.innerHTML='';
+  Object.entries(F).forEach(([key,f])=>{
+    const card=document.createElement('div');
+    card.className='f-card'+(key===currentFilter?' active':'');
+    card.innerHTML=`<div class="f-swatch" style="background:${swatchColors[key]||'#555'}"></div><div class="f-name">${f.name}</div>`;
+    card.addEventListener('click',()=>{
+      currentFilter=key;
+      document.querySelectorAll('.f-card').forEach(x=>x.classList.remove('active'));
+      card.classList.add('active');
+    });
+    filterGrid.appendChild(card);
+  });
+}
+buildFilterGrid();
+
+filterBtn.addEventListener('click',()=>{
+  filterOpen=!filterOpen;
+  filterPanel.classList.toggle('open',filterOpen);
+  filterBtn.style.color=filterOpen?'#e8c178':'';
+  if(filterOpen) buildFilterGrid();
+  // close adjust if open
+  if(filterOpen && adjOpen){ adjOpen=false; adjPanel.classList.remove('open'); adjBtn.classList.remove('active-mode'); }
 });
 
 // ── ADJUST PANEL ─────────────────────────────────────
@@ -546,10 +595,27 @@ SL.sat.sl.addEventListener('input',   e=>{ adj.sat   = +e.target.value/100;   up
 SL.grain.sl.addEventListener('input', e=>{ adj.grain = +e.target.value/1000;  updateSliders(); });
 SL.vig.sl.addEventListener('input',   e=>{ adj.vig   = +e.target.value/125;   updateSliders(); });
 
+SL.zoom = { sl: document.getElementById('sl-zoom'), vl: document.getElementById('vl-zoom') };
+
+SL.zoom.sl.addEventListener('input', e=>{
+  adj.zoom = +e.target.value/100;
+  SL.zoom.vl.textContent = adj.zoom.toFixed(1)+'x';
+});
+
+document.getElementById('mirror-toggle').addEventListener('click',function(){
+  mirrorCapture=!mirrorCapture;
+  this.textContent=mirrorCapture?'ON':'OFF';
+  this.style.color=mirrorCapture?'#e8c178':'#9c9285';
+  this.style.borderColor=mirrorCapture?'#e8c178':'#3a3225';
+});
+
 document.getElementById('adjust-reset').addEventListener('click',()=>{
-  adj = { exp:1, con:1, sat:1, grain:0, vig:0 };
+  adj = { exp:1, con:1, sat:1, grain:0, vig:0, zoom:1.0 };
   SL.exp.sl.value=100; SL.con.sl.value=100; SL.sat.sl.value=100;
-  SL.grain.sl.value=0; SL.vig.sl.value=0;
+  SL.grain.sl.value=0; SL.vig.sl.value=0; SL.zoom.sl.value=100;
+  SL.zoom.vl.textContent='1.0x';
+  const mt=document.getElementById('mirror-toggle');
+  mirrorCapture=false; mt.textContent='OFF'; mt.style.color='#9c9285'; mt.style.borderColor='#3a3225';
   updateSliders();
 });
 
@@ -605,7 +671,11 @@ async function doCapture(){
   const ox   = out.getContext('2d');
 
   if (f.border){ ox.fillStyle='#f4efe2'; ox.fillRect(0,0,out.width,out.height); }
-  ox.drawImage(canvas, pad, pad);
+  if (mirrorCapture){
+    ox.save(); ox.translate(out.width,0); ox.scale(-1,1); ox.drawImage(canvas, out.width-pad-canvas.width, pad); ox.restore();
+  } else {
+    ox.drawImage(canvas, pad, pad);
+  }
 
   // Burn-in date
   const fs = Math.round(canvas.width*.032);
@@ -722,6 +792,11 @@ wrap.addEventListener('touchend',e=>{
 renderGallery();
 startCamera();
 })();
+</script>
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js'));
+}
 </script>
 </body>
 </html>
