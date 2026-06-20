@@ -171,7 +171,16 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
 #pe-warm { background:transparent; }
 #pe-light { opacity:0; background:#fff; mix-blend-mode:screen; }
 #pe-grain { opacity:0; mix-blend-mode:overlay; background-size:100px 100px; }
-#pe-controls { flex-shrink:0; padding:12px 18px 22px; background:#11100d; border-top:1px solid rgba(255,255,255,.06); display:flex; flex-direction:column; gap:7px; }
+#pe-controls { flex-shrink:0; max-height:54vh; overflow-y:auto; padding:12px 18px 22px; background:#11100d; border-top:1px solid rgba(255,255,255,.06); display:flex; flex-direction:column; gap:7px; }
+#pe-controls::-webkit-scrollbar { display:none; }
+#pe-filters { display:flex; gap:10px; overflow-x:auto; overflow-y:hidden; padding:2px 0 4px; -webkit-overflow-scrolling:touch; }
+#pe-filters::-webkit-scrollbar { display:none; }
+#pe-filters .f-swatch { width:52px; height:52px; }
+#pe-filters .f-card { width:52px; }
+#pe-frow { display:flex; align-items:center; gap:8px; padding:0 0 4px; }
+#pe-frow input[type=range] { flex:1; -webkit-appearance:none; appearance:none; height:2px; background:#2a2218; border-radius:1px; outline:none; }
+#pe-frow input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:#e8c178; box-shadow:0 0 4px rgba(232,193,120,.5); }
+#pe-frow input[type=range]::-moz-range-thumb { width:14px; height:14px; border-radius:50%; background:#e8c178; border:none; }
 .pe-actions-row { display:flex; gap:10px; margin-top:4px; }
 .pe-act { flex:1; text-align:center; font-size:9px; letter-spacing:1.5px; color:#9c9285; padding:8px; background:#1d1812; border:1px solid #3a3225; border-radius:3px; cursor:pointer; }
 .pe-act:active { background:#2a2318; color:#e8c178; }
@@ -329,6 +338,8 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
     </div>
   </div>
   <div id="pe-controls">
+    <div id="pe-filters"></div>
+    <div id="pe-frow"><span class="fc-lbl">INTENSIDADE DO EFEITO</span><input type="range" id="pe-fstr" min="0" max="100" value="100"><span class="fc-val" id="pe-fstr-v">100%</span></div>
     <div class="slider-row"><div class="slider-label">BRILHO</div><div class="slider-track"><input type="range" id="pe-bri" min="40" max="210" value="100"></div><div class="slider-val" id="pe-bri-v">0</div></div>
     <div class="slider-row"><div class="slider-label">CLAREAR</div><div class="slider-track"><input type="range" id="pe-light-s" min="0" max="100" value="0"></div><div class="slider-val" id="pe-light-v">0</div></div>
     <div class="slider-row"><div class="slider-label">CONTRASTE</div><div class="slider-track"><input type="range" id="pe-con" min="40" max="180" value="100"></div><div class="slider-val" id="pe-con-v">0</div></div>
@@ -1145,6 +1156,12 @@ const peLightOv = document.getElementById('pe-light');
 const peVigOv   = document.getElementById('pe-vig');
 const peGrainOv = document.getElementById('pe-grain');
 const vEdit     = document.getElementById('viewer-edit');
+const peFilters = document.getElementById('pe-filters');
+const peFstrSl  = document.getElementById('pe-fstr');
+const peFstrV   = document.getElementById('pe-fstr-v');
+let peFilterKey = 'natural';
+let peFstr      = 1;
+let peOrigImg   = new Image();
 
 // Tile de ruído reutilizável (preview + bake)
 const NOISE = (()=>{
@@ -1199,15 +1216,93 @@ document.getElementById('pe-reset').addEventListener('click',()=>{
   peAdj={ bri:1, con:1, sat:1, light:0, warm:0, vig:0, grain:0, rot:0 };
   PE.bri.s.value=100; PE.con.s.value=100; PE.sat.s.value=100; PE.light.s.value=0;
   PE.warm.s.value=0; PE.vig.s.value=0; PE.grain.s.value=0;
+  peFilterKey='natural'; peFstr=1; peFstrSl.value=100; peFstrV.textContent='100%';
+  buildEditorFilters();
+  if(peOrigImg.src) peImg.src=peOrigImg.src;
   peSyncLabels(); pePreview();
 });
+
+// Aplica um filtro retrô completo a uma imagem estática (reestilizar na galeria)
+function renderFilterToDataURL(img, key, t){
+  const f=F[key];
+  if(!f || key==='natural' || t<=0) return img.src;
+  const w=img.naturalWidth, h=img.naturalHeight;
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const x=c.getContext('2d',{willReadFrequently:true});
+  const L=(a,b)=>a+(b-a)*t;
+  let css=`brightness(${L(1,f.b)}) contrast(${L(1,f.c)}) saturate(${Math.max(0,L(1,f.s))})`;
+  if(f.sp>0)  css+=` sepia(${f.sp*t})`;
+  if(f.h!==0) css+=` hue-rotate(${f.h*t}deg)`;
+  if(f.gs>0)  css+=` grayscale(${f.gs*t})`;
+  x.save(); x.filter=css;
+  if(f.chromatic){ const d=2*t;
+    x.globalAlpha=.72; x.drawImage(img,-d,0,w,h);
+    x.globalAlpha=.72; x.drawImage(img, d,0,w,h);
+    x.globalAlpha=1;   x.drawImage(img, 0,0,w,h);
+  } else { x.drawImage(img,0,0,w,h); }
+  x.restore(); x.filter='none';
+  if(f.tint){ x.fillStyle=`rgba(${f.tint[0]},${f.tint[1]},${f.tint[2]},${f.tint[3]*t})`; x.fillRect(0,0,w,h); }
+  if(f.flash){ const g=x.createRadialGradient(w*.44,h*.38,0,w*.44,h*.38,w*.7);
+    g.addColorStop(0,`rgba(255,255,240,${.30*t})`); g.addColorStop(.3,`rgba(255,255,240,${.10*t})`); g.addColorStop(1,'rgba(0,0,0,0)');
+    x.fillStyle=g; x.fillRect(0,0,w,h); }
+  if(f.halation){ x.save(); x.filter='blur(18px) brightness(2.2)'; x.globalCompositeOperation='screen'; x.globalAlpha=.20*t; x.drawImage(c,0,0,w,h); x.restore();
+    x.globalCompositeOperation='screen'; x.globalAlpha=.09*t; x.fillStyle='rgb(255,50,10)'; x.fillRect(0,0,w,h); x.globalCompositeOperation='source-over'; x.globalAlpha=1; }
+  if(f.leak){ x.globalAlpha=t; x.globalCompositeOperation='screen'; let g;
+    if(f.leak==='warm'){ g=x.createLinearGradient(w,0,w*.18,h*.72); g.addColorStop(0,'rgba(255,145,38,.40)'); g.addColorStop(.45,'rgba(255,80,20,.12)'); g.addColorStop(1,'rgba(0,0,0,0)'); }
+    else if(f.leak==='cool'){ g=x.createLinearGradient(0,0,w*.85,h*.85); g.addColorStop(0,'rgba(80,120,255,.30)'); g.addColorStop(.5,'rgba(60,100,255,.08)'); g.addColorStop(1,'rgba(0,0,0,0)'); }
+    else { g=x.createLinearGradient(0,h,w*.6,0); g.addColorStop(0,'rgba(60,200,80,.25)'); g.addColorStop(.5,'rgba(60,200,80,.06)'); g.addColorStop(1,'rgba(0,0,0,0)'); }
+    x.fillStyle=g; x.fillRect(0,0,w,h); x.globalCompositeOperation='source-over'; x.globalAlpha=1; }
+  const vig=Math.min(.88,f.vig*t);
+  if(vig>0){ const g=x.createRadialGradient(w/2,h/2,h*.22,w/2,h/2,h*.78); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,`rgba(0,0,0,${vig})`); x.fillStyle=g; x.fillRect(0,0,w,h); }
+  const ga=f.grain*t;
+  if(ga>0){ x.globalAlpha=ga; x.globalCompositeOperation='overlay'; x.fillStyle=x.createPattern(NOISE,'repeat'); x.fillRect(0,0,w,h); x.globalCompositeOperation='source-over'; x.globalAlpha=1; }
+  if(f.scan>0){ x.globalAlpha=f.scan*t; x.fillStyle='#000'; for(let y=0;y<h;y+=3) x.fillRect(0,y,w,1); x.globalAlpha=1; }
+  return c.toDataURL('image/jpeg',.92);
+}
+
+let baseScheduled=false;
+function reRenderBase(){
+  baseScheduled=false;
+  if(!peOrigImg.complete || !peOrigImg.naturalWidth) return;
+  peImg.src = renderFilterToDataURL(peOrigImg, peFilterKey, peFstr);
+}
+function scheduleBase(){
+  if(baseScheduled) return;
+  baseScheduled=true;
+  requestAnimationFrame(reRenderBase);
+}
+
+function buildEditorFilters(){
+  peFilters.innerHTML='';
+  const keys=['natural', ...Object.keys(F).filter(k=>k!=='natural')];
+  keys.forEach(key=>{
+    const card=document.createElement('div');
+    card.className='f-card'+(key===peFilterKey?' active':'');
+    const label = key==='natural' ? 'ORIGINAL' : F[key].name;
+    card.innerHTML=`<div class="f-swatch" style="background:${swatchColors[key]||'#555'}"></div><div class="f-name">${label}</div>`;
+    card.addEventListener('click',()=>{
+      peFilterKey=key;
+      peFilters.querySelectorAll('.f-card').forEach(x=>x.classList.remove('active'));
+      card.classList.add('active');
+      card.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});
+      scheduleBase();
+    });
+    peFilters.appendChild(card);
+  });
+}
+
+peFstrSl.addEventListener('input',e=>{ peFstr=+e.target.value/100; peFstrV.textContent=e.target.value+'%'; scheduleBase(); });
 
 function openEditor(){
   const p=photos[viewerIdx]; if(!p) return;
   peAdj={ bri:1, con:1, sat:1, light:0, warm:0, vig:0, grain:0, rot:0 };
   PE.bri.s.value=100; PE.con.s.value=100; PE.sat.s.value=100; PE.light.s.value=0;
   PE.warm.s.value=0; PE.vig.s.value=0; PE.grain.s.value=0;
+  peFilterKey='natural'; peFstr=1; peFstrSl.value=100; peFstrV.textContent='100%';
   peSyncLabels();
+  peOrigImg=new Image();
+  peOrigImg.src=p.src;
+  buildEditorFilters();
   peImg.onload=pePreview;
   peImg.src=p.src;
   pePreview();
@@ -1258,6 +1353,7 @@ document.getElementById('pe-save').addEventListener('click',()=>{
   const p=photos[viewerIdx]; if(!p) return;
   const data=bakeEdit(peImg);
   photos[viewerIdx].src=data;
+  if(peFilterKey!=='natural' && peFstr>0) photos[viewerIdx].filter=F[peFilterKey].name;
   try { sessionStorage.setItem('retrocam-photos', JSON.stringify(photos.slice(0,60))); } catch(e){}
   renderGallery(); refreshViewer();
   editor.classList.remove('show');
