@@ -120,7 +120,7 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
 
 /* FILTER PANEL — carrossel horizontal compacto */
 #filter-panel { background:#0e0c08; border-top:1px solid rgba(255,255,255,.08); overflow:hidden; max-height:0; transition:max-height .3s cubic-bezier(.4,0,.2,1); z-index:20; flex-shrink:0; }
-#filter-panel.open { max-height:222px; }
+#filter-panel.open { max-height:238px; }
 #filter-panel-header { display:flex; align-items:center; justify-content:space-between; padding:9px 16px 2px; }
 #filter-panel-title { font-size:9px; letter-spacing:2px; color:#5a5040; }
 #filter-panel-close { font-size:13px; color:#6b6256; cursor:pointer; padding:2px 6px; line-height:1; }
@@ -142,6 +142,7 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
 .fc-btn { width:34px; height:34px; flex-shrink:0; border-radius:50%; border:1px solid #3a3225; background:#1d1812; color:#cbbfa0; display:flex; align-items:center; justify-content:center; font-size:15px; cursor:pointer; }
 .fc-btn:active, .fc-btn.on { background:#2a2318; color:#e8c178; border-color:#e8c178; }
 
+#filter-desc { padding:2px 16px 0; font-size:8.5px; letter-spacing:.5px; color:#8a7d68; min-height:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #filter-grid { display:flex; gap:11px; padding:6px 16px 12px; overflow-x:auto; overflow-y:hidden; scroll-snap-type:x proximity; -webkit-overflow-scrolling:touch; }
 #filter-grid::-webkit-scrollbar { display:none; }
 .f-card { flex:0 0 auto; width:60px; background:transparent; border:none; cursor:pointer; scroll-snap-align:center; transition:transform .12s; position:relative; }
@@ -233,6 +234,7 @@ html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-f
       <div class="fc-btn" id="fc-compare">◐</div>
       <div class="fc-btn" id="fc-dice">🎲</div>
     </div>
+    <div id="filter-desc"></div>
     <div id="filter-grid"></div>
   </div>
 
@@ -682,6 +684,85 @@ function effFilter(){
   };
 }
 
+// ── MOTOR DE MINIATURAS / FILTRO ESTÁTICO ─────────────
+// Tile de ruído reutilizável (miniaturas, bake do editor, re-filtro)
+const NOISE = (()=>{
+  const n=document.createElement('canvas'); n.width=n.height=100;
+  const nx=n.getContext('2d'); const id=nx.createImageData(100,100); const d=id.data;
+  for(let i=0;i<d.length;i+=4){ const v=Math.random()*255|0; d[i]=d[i+1]=d[i+2]=v; d[i+3]=255; }
+  nx.putImageData(id,0,0); return n;
+})();
+
+// Cena sintética de fallback (quando a câmera ainda não está pronta)
+const SAMPLE = (()=>{
+  const w=160,h=200,c=document.createElement('canvas'); c.width=w;c.height=h;
+  const x=c.getContext('2d');
+  let g=x.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,'#9cc6e8'); g.addColorStop(.5,'#dfe7ec'); g.addColorStop(.5,'#caa97e'); g.addColorStop(1,'#6e5236');
+  x.fillStyle=g; x.fillRect(0,0,w,h);
+  x.fillStyle='rgba(255,240,200,.95)'; x.beginPath(); x.arc(w*.72,h*.22,20,0,7); x.fill();      // sol
+  x.fillStyle='#caa07a'; x.beginPath(); x.arc(w*.34,h*.6,30,0,7); x.fill();                       // pele
+  x.fillStyle='rgba(0,0,0,.25)'; x.fillRect(0,h*.78,w,h*.22);                                     // sombra
+  return c;
+})();
+
+// Desenha a base (com filtro CSS + aberração cromática) cobrindo o destino
+function drawFilterBase(x, src, sx,sy,sw,sh, key, t, w, h){
+  const f=F[key];
+  const L=(a,b)=>a+(b-a)*t;
+  let css='none';
+  if(f && key!=='natural' && t>0){
+    css=`brightness(${L(1,f.b)}) contrast(${L(1,f.c)}) saturate(${Math.max(0,L(1,f.s))})`;
+    if(f.sp>0)  css+=` sepia(${f.sp*t})`;
+    if(f.h!==0) css+=` hue-rotate(${f.h*t}deg)`;
+    if(f.gs>0)  css+=` grayscale(${f.gs*t})`;
+  }
+  x.save(); x.filter=css;
+  if(f && f.chromatic && t>0){ const dd=Math.max(1,2*t*(w/640));
+    x.globalAlpha=.72; x.drawImage(src,sx,sy,sw,sh,-dd,0,w,h);
+    x.globalAlpha=.72; x.drawImage(src,sx,sy,sw,sh, dd,0,w,h);
+    x.globalAlpha=1;   x.drawImage(src,sx,sy,sw,sh, 0,0,w,h);
+  } else {
+    x.drawImage(src,sx,sy,sw,sh,0,0,w,h);
+  }
+  x.restore(); x.filter='none';
+}
+
+// Aplica tint, leak, flash, halation, vinheta, grão e scanlines
+function applyFilterFX(x, key, t, w, h, self){
+  const f=F[key];
+  if(!f || key==='natural' || t<=0) return;
+  if(f.tint){ x.fillStyle=`rgba(${f.tint[0]},${f.tint[1]},${f.tint[2]},${f.tint[3]*t})`; x.fillRect(0,0,w,h); }
+  if(f.flash){ const g=x.createRadialGradient(w*.44,h*.38,0,w*.44,h*.38,w*.7);
+    g.addColorStop(0,`rgba(255,255,240,${.30*t})`); g.addColorStop(.3,`rgba(255,255,240,${.10*t})`); g.addColorStop(1,'rgba(0,0,0,0)');
+    x.fillStyle=g; x.fillRect(0,0,w,h); }
+  if(f.halation){ const bl=Math.max(2,Math.round(w*0.014));
+    x.save(); x.filter='blur('+bl+'px) brightness(2.2)'; x.globalCompositeOperation='screen'; x.globalAlpha=.20*t; x.drawImage(self,0,0,w,h); x.restore();
+    x.globalCompositeOperation='screen'; x.globalAlpha=.09*t; x.fillStyle='rgb(255,50,10)'; x.fillRect(0,0,w,h); x.globalCompositeOperation='source-over'; x.globalAlpha=1; }
+  if(f.leak){ x.globalAlpha=t; x.globalCompositeOperation='screen'; let g;
+    if(f.leak==='warm'){ g=x.createLinearGradient(w,0,w*.18,h*.72); g.addColorStop(0,'rgba(255,145,38,.40)'); g.addColorStop(.45,'rgba(255,80,20,.12)'); g.addColorStop(1,'rgba(0,0,0,0)'); }
+    else if(f.leak==='cool'){ g=x.createLinearGradient(0,0,w*.85,h*.85); g.addColorStop(0,'rgba(80,120,255,.30)'); g.addColorStop(.5,'rgba(60,100,255,.08)'); g.addColorStop(1,'rgba(0,0,0,0)'); }
+    else { g=x.createLinearGradient(0,h,w*.6,0); g.addColorStop(0,'rgba(60,200,80,.25)'); g.addColorStop(.5,'rgba(60,200,80,.06)'); g.addColorStop(1,'rgba(0,0,0,0)'); }
+    x.fillStyle=g; x.fillRect(0,0,w,h); x.globalCompositeOperation='source-over'; x.globalAlpha=1; }
+  const vig=Math.min(.88,f.vig*t);
+  if(vig>0){ const g=x.createRadialGradient(w/2,h/2,h*.22,w/2,h/2,h*.78); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,`rgba(0,0,0,${vig})`); x.fillStyle=g; x.fillRect(0,0,w,h); }
+  const ga=f.grain*t;
+  if(ga>0){ x.globalAlpha=ga; x.globalCompositeOperation='overlay'; x.fillStyle=x.createPattern(NOISE,'repeat'); x.fillRect(0,0,w,h); x.globalCompositeOperation='source-over'; x.globalAlpha=1; }
+  if(f.scan>0){ x.globalAlpha=f.scan*t; x.fillStyle='#000'; for(let y=0;y<h;y+=3) x.fillRect(0,y,w,1); x.globalAlpha=1; }
+}
+
+// Miniatura quadrada de um filtro a partir de uma fonte (vídeo/imagem/canvas)
+function makeThumb(src, sw, sh, key, size){
+  const c=document.createElement('canvas'); c.width=size; c.height=size;
+  const x=c.getContext('2d');
+  let cx,cy,cw2,ch2;
+  if(sw>sh){ cw2=sh; ch2=sh; cx=(sw-sh)/2; cy=0; }
+  else      { cw2=sw; ch2=sw; cx=0; cy=(sh-sw)/2; }
+  drawFilterBase(x, src, cx,cy,cw2,ch2, key, 1, size, size);
+  applyFilterFX(x, key, 1, size, size, c);
+  return c.toDataURL('image/jpeg',.82);
+}
+
 // ── RENDER LOOP ───────────────────────────────────────
 function renderLoop(){
   if (video.readyState >= 2){
@@ -749,6 +830,50 @@ const swatchColors = {
   y2k:'#e85ab0',agfa:'#d83258',faded:'#cabfa8',dreamy:'#e8b6cf'
 };
 
+// Descrições curtas
+const FILTER_DESC = {
+  kodak:'Tons dourados e clima nostálgico', polaroid:'Baixo contraste e cores suaves',
+  vhs:'Ruído analógico e cara de fita', super8:'Cinematográfico e granulado',
+  disposable:'Flash forte de descartável', cinestill:'Brilho avermelhado de cinema noturno',
+  lomo:'Cores saturadas e vinheta forte', cross:'Cores trocadas, look experimental',
+  sepia:'Marrom clássico envelhecido', noir:'Preto e branco de alto contraste',
+  daguerro:'Daguerreótipo metálico antigo', infrared:'Falsa cor infravermelha surreal',
+  natural:'Sem filtro, cores reais', expired:'Cores lavadas de filme vencido',
+  velvia:'Cores vivas e contraste alto', portrait:'Pele suave e tons quentes',
+  holga:'Vinheta pesada de câmera plástica', cyanotype:'Azul monocromático de cianotipia',
+  bleach:'Dessaturado, bleach bypass', portra:'Pele natural de filme profissional',
+  gold200:'Quente e dourado, clássico Kodak', superia:'Verdes vibrantes da Fuji',
+  sx70:'Polaroid vintage cremosa', instax:'Instantânea clara e fresca',
+  handycam:'Filmadora 90s com scanlines', minidv:'Vídeo digital antigo azulado',
+  webcam:'Baixa qualidade nostálgica', y2k:'Brilho saturado dos anos 2000',
+  agfa:'Vermelhos intensos de filme europeu', faded:'Desbotado e suave',
+  dreamy:'Brilho sonhador e etéreo',
+};
+function setFilterDesc(key){
+  const el=document.getElementById('filter-desc');
+  if(el) el.textContent = (F[key]? F[key].name+' — ' : '') + (FILTER_DESC[key]||'');
+}
+
+// Miniaturas reais do efeito (base = cena ao vivo, ou cena sintética)
+let thumbBase=null, filterThumbs={};
+function refreshThumbBase(){
+  if(video && video.readyState>=2 && video.videoWidth){
+    const bw=160, bh=Math.max(1,Math.round(160*video.videoHeight/video.videoWidth));
+    const bc=document.createElement('canvas'); bc.width=bw; bc.height=bh;
+    bc.getContext('2d').drawImage(video,0,0,bw,bh);
+    thumbBase={src:bc,w:bw,h:bh};
+  } else {
+    thumbBase={src:SAMPLE,w:SAMPLE.width,h:SAMPLE.height};
+  }
+  filterThumbs={};
+}
+function thumbFor(key){
+  if(filterThumbs[key]) return filterThumbs[key];
+  if(!thumbBase) refreshThumbBase();
+  const u=makeThumb(thumbBase.src, thumbBase.w, thumbBase.h, key, 64);
+  filterThumbs[key]=u; return u;
+}
+
 // Abas de categoria
 const TABS = [
   {id:'all',     name:'TODOS'},
@@ -801,6 +926,7 @@ function selectFilter(key,card){
   currentFilter=key;
   document.querySelectorAll('.f-card').forEach(x=>x.classList.remove('active'));
   if(card){ card.classList.add('active'); card.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
+  setFilterDesc(key);
 }
 
 function applyRecipe(r){
@@ -854,11 +980,14 @@ function buildFilterGrid(){
     const card=document.createElement('div');
     card.className='f-card'+(key===currentFilter?' active':'');
     const on=favorites.includes(key)?' on':'';
-    card.innerHTML=`<div class="f-swatch" style="background:${swatchColors[key]||'#555'}"></div><div class="f-star${on}">★</div><div class="f-name">${f.name}</div>`;
+    let thumb=''; try{ thumb=thumbFor(key); }catch(e){}
+    const bg = thumb ? `background-image:url(${thumb});background-size:cover;background-position:center` : `background:${swatchColors[key]||'#555'}`;
+    card.innerHTML=`<div class="f-swatch" style="${bg}"></div><div class="f-star${on}">★</div><div class="f-name">${f.name}</div>`;
     card.querySelector('.f-star').addEventListener('click',e=>{ e.stopPropagation(); toggleFav(key); });
     card.addEventListener('click',()=>selectFilter(key,card));
     filterGrid.appendChild(card);
   });
+  setFilterDesc(currentFilter);
 }
 
 function centerActiveFilter(){
@@ -899,7 +1028,7 @@ filterBtn.addEventListener('click',()=>{
   filterOpen=!filterOpen;
   filterPanel.classList.toggle('open',filterOpen);
   filterBtn.style.color=filterOpen?'#e8c178':'';
-  if(filterOpen){ buildTabs(); buildFilterGrid(); requestAnimationFrame(centerActiveFilter); }
+  if(filterOpen){ refreshThumbBase(); buildTabs(); buildFilterGrid(); requestAnimationFrame(centerActiveFilter); }
   if(filterOpen && adjOpen){ adjOpen=false; adjPanel.classList.remove('open'); adjBtn.classList.remove('active-mode'); }
 });
 
@@ -1163,13 +1292,6 @@ let peFilterKey = 'natural';
 let peFstr      = 1;
 let peOrigImg   = new Image();
 
-// Tile de ruído reutilizável (preview + bake)
-const NOISE = (()=>{
-  const n=document.createElement('canvas'); n.width=n.height=100;
-  const nx=n.getContext('2d'); const id=nx.createImageData(100,100); const d=id.data;
-  for(let i=0;i<d.length;i+=4){ const v=Math.random()*255|0; d[i]=d[i+1]=d[i+2]=v; d[i+3]=255; }
-  nx.putImageData(id,0,0); return n;
-})();
 peGrainOv.style.backgroundImage = `url(${NOISE.toDataURL()})`;
 
 let peAdj = { bri:1, con:1, sat:1, light:0, warm:0, vig:0, grain:0, rot:0 };
@@ -1224,39 +1346,12 @@ document.getElementById('pe-reset').addEventListener('click',()=>{
 
 // Aplica um filtro retrô completo a uma imagem estática (reestilizar na galeria)
 function renderFilterToDataURL(img, key, t){
-  const f=F[key];
-  if(!f || key==='natural' || t<=0) return img.src;
+  if(!F[key] || key==='natural' || t<=0) return img.src;
   const w=img.naturalWidth, h=img.naturalHeight;
   const c=document.createElement('canvas'); c.width=w; c.height=h;
   const x=c.getContext('2d',{willReadFrequently:true});
-  const L=(a,b)=>a+(b-a)*t;
-  let css=`brightness(${L(1,f.b)}) contrast(${L(1,f.c)}) saturate(${Math.max(0,L(1,f.s))})`;
-  if(f.sp>0)  css+=` sepia(${f.sp*t})`;
-  if(f.h!==0) css+=` hue-rotate(${f.h*t}deg)`;
-  if(f.gs>0)  css+=` grayscale(${f.gs*t})`;
-  x.save(); x.filter=css;
-  if(f.chromatic){ const d=2*t;
-    x.globalAlpha=.72; x.drawImage(img,-d,0,w,h);
-    x.globalAlpha=.72; x.drawImage(img, d,0,w,h);
-    x.globalAlpha=1;   x.drawImage(img, 0,0,w,h);
-  } else { x.drawImage(img,0,0,w,h); }
-  x.restore(); x.filter='none';
-  if(f.tint){ x.fillStyle=`rgba(${f.tint[0]},${f.tint[1]},${f.tint[2]},${f.tint[3]*t})`; x.fillRect(0,0,w,h); }
-  if(f.flash){ const g=x.createRadialGradient(w*.44,h*.38,0,w*.44,h*.38,w*.7);
-    g.addColorStop(0,`rgba(255,255,240,${.30*t})`); g.addColorStop(.3,`rgba(255,255,240,${.10*t})`); g.addColorStop(1,'rgba(0,0,0,0)');
-    x.fillStyle=g; x.fillRect(0,0,w,h); }
-  if(f.halation){ x.save(); x.filter='blur(18px) brightness(2.2)'; x.globalCompositeOperation='screen'; x.globalAlpha=.20*t; x.drawImage(c,0,0,w,h); x.restore();
-    x.globalCompositeOperation='screen'; x.globalAlpha=.09*t; x.fillStyle='rgb(255,50,10)'; x.fillRect(0,0,w,h); x.globalCompositeOperation='source-over'; x.globalAlpha=1; }
-  if(f.leak){ x.globalAlpha=t; x.globalCompositeOperation='screen'; let g;
-    if(f.leak==='warm'){ g=x.createLinearGradient(w,0,w*.18,h*.72); g.addColorStop(0,'rgba(255,145,38,.40)'); g.addColorStop(.45,'rgba(255,80,20,.12)'); g.addColorStop(1,'rgba(0,0,0,0)'); }
-    else if(f.leak==='cool'){ g=x.createLinearGradient(0,0,w*.85,h*.85); g.addColorStop(0,'rgba(80,120,255,.30)'); g.addColorStop(.5,'rgba(60,100,255,.08)'); g.addColorStop(1,'rgba(0,0,0,0)'); }
-    else { g=x.createLinearGradient(0,h,w*.6,0); g.addColorStop(0,'rgba(60,200,80,.25)'); g.addColorStop(.5,'rgba(60,200,80,.06)'); g.addColorStop(1,'rgba(0,0,0,0)'); }
-    x.fillStyle=g; x.fillRect(0,0,w,h); x.globalCompositeOperation='source-over'; x.globalAlpha=1; }
-  const vig=Math.min(.88,f.vig*t);
-  if(vig>0){ const g=x.createRadialGradient(w/2,h/2,h*.22,w/2,h/2,h*.78); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,`rgba(0,0,0,${vig})`); x.fillStyle=g; x.fillRect(0,0,w,h); }
-  const ga=f.grain*t;
-  if(ga>0){ x.globalAlpha=ga; x.globalCompositeOperation='overlay'; x.fillStyle=x.createPattern(NOISE,'repeat'); x.fillRect(0,0,w,h); x.globalCompositeOperation='source-over'; x.globalAlpha=1; }
-  if(f.scan>0){ x.globalAlpha=f.scan*t; x.fillStyle='#000'; for(let y=0;y<h;y+=3) x.fillRect(0,y,w,1); x.globalAlpha=1; }
+  drawFilterBase(x, img, 0,0,w,h, key, t, w, h);
+  applyFilterFX(x, key, t, w, h, c);
   return c.toDataURL('image/jpeg',.92);
 }
 
@@ -1272,6 +1367,14 @@ function scheduleBase(){
   requestAnimationFrame(reRenderBase);
 }
 
+let peThumbs={};
+function peThumbFor(key){
+  if(peThumbs[key]) return peThumbs[key];
+  if(!peOrigImg.complete || !peOrigImg.naturalWidth) return null;
+  const u=makeThumb(peOrigImg, peOrigImg.naturalWidth, peOrigImg.naturalHeight, key, 56);
+  peThumbs[key]=u; return u;
+}
+
 function buildEditorFilters(){
   peFilters.innerHTML='';
   const keys=['natural', ...Object.keys(F).filter(k=>k!=='natural')];
@@ -1279,7 +1382,9 @@ function buildEditorFilters(){
     const card=document.createElement('div');
     card.className='f-card'+(key===peFilterKey?' active':'');
     const label = key==='natural' ? 'ORIGINAL' : F[key].name;
-    card.innerHTML=`<div class="f-swatch" style="background:${swatchColors[key]||'#555'}"></div><div class="f-name">${label}</div>`;
+    let thumb=null; try{ thumb=peThumbFor(key); }catch(e){}
+    const bg = thumb ? `background-image:url(${thumb});background-size:cover;background-position:center` : `background:${swatchColors[key]||'#555'}`;
+    card.innerHTML=`<div class="f-swatch" style="${bg}"></div><div class="f-name">${label}</div>`;
     card.addEventListener('click',()=>{
       peFilterKey=key;
       peFilters.querySelectorAll('.f-card').forEach(x=>x.classList.remove('active'));
@@ -1300,7 +1405,9 @@ function openEditor(){
   PE.warm.s.value=0; PE.vig.s.value=0; PE.grain.s.value=0;
   peFilterKey='natural'; peFstr=1; peFstrSl.value=100; peFstrV.textContent='100%';
   peSyncLabels();
+  peThumbs={};
   peOrigImg=new Image();
+  peOrigImg.onload=()=>{ peThumbs={}; buildEditorFilters(); };
   peOrigImg.src=p.src;
   buildEditorFilters();
   peImg.onload=pePreview;
