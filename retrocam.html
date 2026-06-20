@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>RETROCAM</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
+html,body { width:100%; height:100%; background:#0a0908; overflow:hidden; font-family:'Courier New',monospace; color:#e8dfc8; }
+#app { position:fixed; inset:0; display:flex; flex-direction:column; background:#0a0908; }
+
+/* TOP BAR */
+#topbar { position:absolute; top:0; left:0; right:0; display:flex; align-items:center; justify-content:space-between; padding:14px 18px; z-index:20; background:linear-gradient(to bottom,rgba(0,0,0,.6),transparent); pointer-events:none; }
+.brand { font-size:13px; letter-spacing:3px; font-weight:bold; color:#f0e6cc; text-shadow:0 0 8px rgba(255,180,90,.4); }
+.brand span { color:#c9622a; }
+#topbar-right { display:flex; align-items:center; gap:10px; pointer-events:none; }
+#frame-counter { font-size:11px; letter-spacing:1px; color:#d8c9a0; background:rgba(0,0,0,.35); padding:4px 9px; border-radius:2px; border:1px solid rgba(255,255,255,.12); }
+#timer-indicator { font-size:11px; color:#e8c178; background:rgba(0,0,0,.4); padding:4px 9px; border-radius:2px; border:1px solid rgba(232,193,120,.5); display:none; }
+#timer-indicator.on { display:block; }
+
+/* VIEWFINDER */
+#viewfinder { position:relative; flex:1; overflow:hidden; background:#000; display:flex; align-items:center; justify-content:center; }
+#video { display:none; }
+#canvas { width:100%; height:100%; object-fit:cover; display:block; }
+#vf-frame { position:absolute; inset:0; pointer-events:none; z-index:5; }
+.corner { position:absolute; width:22px; height:22px; border-color:rgba(240,230,200,.55); border-style:solid; border-width:0; }
+.corner.tl { top:14px; left:14px; border-top-width:2px; border-left-width:2px; }
+.corner.tr { top:14px; right:14px; border-top-width:2px; border-right-width:2px; }
+.corner.bl { bottom:14px; left:14px; border-bottom-width:2px; border-left-width:2px; }
+.corner.br { bottom:14px; right:14px; border-bottom-width:2px; border-right-width:2px; }
+#date-stamp { position:absolute; bottom:16px; right:18px; font-size:15px; color:#ff9a2e; text-shadow:1px 1px 0 rgba(0,0,0,.6); letter-spacing:1px; font-style:italic; z-index:6; pointer-events:none; opacity:.92; }
+#flash-overlay { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:50; }
+
+/* COUNTDOWN */
+#countdown-overlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center; z-index:45; pointer-events:none; background:rgba(0,0,0,.25); }
+#countdown-overlay.show { display:flex; }
+#countdown-num { font-size:110px; font-weight:bold; color:#e8c178; text-shadow:0 0 50px rgba(232,193,120,.9),0 2px 10px rgba(0,0,0,.9); letter-spacing:-4px; }
+
+/* FILM STRIP */
+#filmstrip { display:flex; gap:8px; padding:10px 14px; overflow-x:auto; background:#14110d; border-top:1px solid rgba(255,255,255,.06); border-bottom:1px solid rgba(255,255,255,.04); z-index:20; scrollbar-width:none; flex-shrink:0; }
+#filmstrip::-webkit-scrollbar { display:none; }
+.film-chip { flex:0 0 auto; padding:6px 13px; font-size:10.5px; letter-spacing:1.2px; color:#9c9285; background:#1d1812; border:1px solid #2c2519; border-radius:2px; white-space:nowrap; cursor:pointer; transition:all .15s; }
+.film-chip.active { color:#1a1410; background:#e8c178; border-color:#e8c178; font-weight:bold; }
+
+/* ADJUST PANEL */
+#adjust-panel { background:#11100d; border-top:1px solid rgba(255,255,255,.05); overflow:hidden; max-height:0; transition:max-height .28s ease; z-index:20; flex-shrink:0; }
+#adjust-panel.open { max-height:200px; }
+#adjust-inner { padding:10px 18px 6px; display:flex; flex-direction:column; gap:6px; }
+.slider-row { display:flex; align-items:center; gap:10px; }
+.slider-label { font-size:9px; letter-spacing:1.5px; color:#6b6256; width:64px; flex-shrink:0; }
+.slider-track { flex:1; }
+.slider-track input[type=range] { width:100%; -webkit-appearance:none; appearance:none; height:2px; background:#2a2218; border-radius:1px; outline:none; cursor:pointer; }
+.slider-track input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:#e8c178; cursor:pointer; box-shadow:0 0 4px rgba(232,193,120,.5); }
+.slider-track input[type=range]::-moz-range-thumb { width:14px; height:14px; border-radius:50%; background:#e8c178; border:none; cursor:pointer; }
+.slider-val { font-size:9px; color:#9c9285; width:34px; text-align:right; flex-shrink:0; }
+#adjust-reset { font-size:9px; letter-spacing:1.5px; color:#4a4035; text-align:center; padding:6px; cursor:pointer; }
+#adjust-reset:active { color:#e8c178; }
+
+/* CONTROLS */
+#controls { display:flex; align-items:center; justify-content:space-around; padding:14px 16px 22px; background:#14110d; z-index:20; flex-shrink:0; }
+.ctrl-btn { width:44px; height:44px; border-radius:50%; border:1px solid #3a3225; background:#1d1812; color:#cbbfa0; display:flex; align-items:center; justify-content:center; font-size:17px; cursor:pointer; transition:background .1s; flex-shrink:0; }
+.ctrl-btn:active { background:#2a2318; }
+.ctrl-btn.active-mode { border-color:#e8c178; color:#e8c178; }
+#shutter { width:70px; height:70px; border-radius:50%; background:radial-gradient(circle at 35% 30%,#fff5e0,#e8c178 40%,#a8762e 100%); border:3px solid #1d1812; box-shadow:0 0 0 2px #4a3f2a,inset 0 -3px 6px rgba(0,0,0,.25); cursor:pointer; transition:transform .1s; flex-shrink:0; }
+#shutter:active { transform:scale(.92); }
+
+/* GALLERY DRAWER */
+#gallery-tab { position:fixed; bottom:0; left:0; right:0; transform:translateY(100%); transition:transform .3s ease; background:#14110d; z-index:100; max-height:80%; display:flex; flex-direction:column; border-top:2px solid #3a3225; }
+#gallery-tab.open { transform:translateY(0); }
+#gallery-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid rgba(255,255,255,.08); flex-shrink:0; }
+#gallery-header h2 { font-size:13px; letter-spacing:2px; color:#e8c178; }
+#close-gallery { font-size:13px; color:#9c9285; cursor:pointer; padding:4px 10px; }
+#gallery-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:2px; padding:2px; overflow-y:auto; }
+.gallery-item { aspect-ratio:3/4; overflow:hidden; position:relative; background:#1d1812; cursor:pointer; }
+.gallery-item img { width:100%; height:100%; object-fit:cover; display:block; }
+.gallery-item .filter-badge { position:absolute; top:4px; left:4px; font-size:7.5px; background:rgba(0,0,0,.75); color:#e8c178; padding:2px 5px; border-radius:2px; letter-spacing:.5px; }
+#gallery-empty { grid-column:1/-1; text-align:center; padding:40px 20px; color:#6b6256; font-size:12px; letter-spacing:1px; line-height:1.8; }
+
+/* GALLERY VIEWER */
+#gallery-viewer { position:fixed; inset:0; background:#0a0908; z-index:150; display:none; flex-direction:column; }
+#gallery-viewer.show { display:flex; }
+#viewer-topbar { display:flex; align-items:center; justify-content:space-between; padding:16px 18px; flex-shrink:0; }
+#viewer-count { font-size:11px; letter-spacing:2px; color:#6b6256; }
+#viewer-close { font-size:24px; color:#9c9285; cursor:pointer; padding:4px; }
+#viewer-img-wrap { flex:1; overflow:hidden; display:flex; align-items:center; justify-content:center; padding:8px 16px; touch-action:pan-y; }
+#viewer-img { max-width:100%; max-height:100%; box-shadow:0 8px 40px rgba(0,0,0,.8); pointer-events:none; display:block; }
+#viewer-bottombar { padding:14px 20px 28px; display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(255,255,255,.07); flex-shrink:0; }
+#viewer-filter-name { font-size:9px; letter-spacing:2px; color:#e8c178; background:rgba(232,193,120,.1); padding:5px 10px; border-radius:2px; border:1px solid rgba(232,193,120,.25); }
+.viewer-actions { display:flex; gap:18px; }
+.viewer-action { display:flex; flex-direction:column; align-items:center; gap:5px; cursor:pointer; }
+.viewer-action .icon { width:44px; height:44px; border-radius:50%; background:#1d1812; border:1px solid #3a3225; display:flex; align-items:center; justify-content:center; font-size:18px; }
+.viewer-action span { font-size:8.5px; letter-spacing:1px; color:#6b6256; }
+.viewer-action:active .icon { background:#2a2318; }
+
+/* REVIEW */
+#review { position:fixed; inset:0; background:#0a0908; z-index:200; display:none; flex-direction:column; }
+#review.show { display:flex; }
+#review-img-wrap { flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; padding:16px; }
+#review-img { max-width:100%; max-height:100%; box-shadow:0 8px 30px rgba(0,0,0,.6); }
+#review-controls { display:flex; justify-content:space-around; padding:18px 24px 30px; flex-shrink:0; }
+.review-btn { display:flex; flex-direction:column; align-items:center; gap:6px; color:#cbbfa0; font-size:10px; letter-spacing:1px; cursor:pointer; }
+.review-btn .icon { width:50px; height:50px; border-radius:50%; background:#1d1812; border:1px solid #3a3225; display:flex; align-items:center; justify-content:center; font-size:20px; }
+.review-btn:active .icon { background:#2a2318; }
+
+/* PERMISSION */
+#permission-screen { position:fixed; inset:0; background:#0a0908; z-index:300; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:30px; text-align:center; }
+#permission-screen h1 { font-size:16px; letter-spacing:3px; color:#e8c178; }
+#permission-screen p { font-size:12px; color:#9c9285; line-height:1.7; max-width:280px; }
+#grant-btn { padding:12px 28px; background:#e8c178; color:#1a1410; font-weight:bold; border-radius:3px; letter-spacing:1.5px; font-size:12px; cursor:pointer; }
+#permission-screen.hidden { display:none; }
+
+@keyframes flashpop { 0%{opacity:.85} 100%{opacity:0} }
+@keyframes countIn { 0%{transform:scale(1.4);opacity:0} 30%{opacity:1} 100%{transform:scale(1);opacity:.85} }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="topbar">
+    <div class="brand">RETRO<span>CAM</span></div>
+    <div id="topbar-right">
+      <div id="timer-indicator">⏱ 3s</div>
+      <div id="frame-counter">EXP. 24/24</div>
+    </div>
+  </div>
+
+  <div id="viewfinder">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+    <div id="vf-frame">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+    </div>
+    <div id="date-stamp"></div>
+    <div id="flash-overlay"></div>
+    <div id="countdown-overlay"><div id="countdown-num">3</div></div>
+  </div>
+
+  <div id="filmstrip">
+    <div class="film-chip active" data-filter="kodak">KODAK '78</div>
+    <div class="film-chip" data-filter="polaroid">POLAROID</div>
+    <div class="film-chip" data-filter="vhs">VHS CAM</div>
+    <div class="film-chip" data-filter="super8">SUPER 8</div>
+    <div class="film-chip" data-filter="disposable">DISPOSABLE</div>
+    <div class="film-chip" data-filter="cinestill">CINESTILL</div>
+    <div class="film-chip" data-filter="lomo">LOMO LC-A</div>
+    <div class="film-chip" data-filter="cross">CROSS PROC</div>
+    <div class="film-chip" data-filter="sepia">SEPIA</div>
+    <div class="film-chip" data-filter="noir">NOIR</div>
+    <div class="film-chip" data-filter="daguerro">DAGUERRO</div>
+    <div class="film-chip" data-filter="infrared">INFRARED</div>
+    <div class="film-chip" data-filter="natural">NATURAL</div>
+  </div>
+
+  <div id="adjust-panel">
+    <div id="adjust-inner">
+      <div class="slider-row">
+        <div class="slider-label">EXPOSURE</div>
+        <div class="slider-track"><input type="range" id="sl-exp" min="40" max="200" value="100"></div>
+        <div class="slider-val" id="vl-exp">0</div>
+      </div>
+      <div class="slider-row">
+        <div class="slider-label">CONTRAST</div>
+        <div class="slider-track"><input type="range" id="sl-con" min="40" max="200" value="100"></div>
+        <div class="slider-val" id="vl-con">0</div>
+      </div>
+      <div class="slider-row">
+        <div class="slider-label">SATURATION</div>
+        <div class="slider-track"><input type="range" id="sl-sat" min="0" max="300" value="100"></div>
+        <div class="slider-val" id="vl-sat">0</div>
+      </div>
+      <div class="slider-row">
+        <div class="slider-label">GRAIN</div>
+        <div class="slider-track"><input type="range" id="sl-grain" min="0" max="100" value="0"></div>
+        <div class="slider-val" id="vl-grain">+0</div>
+      </div>
+      <div class="slider-row">
+        <div class="slider-label">VIGNETTE</div>
+        <div class="slider-track"><input type="range" id="sl-vig" min="0" max="100" value="0"></div>
+        <div class="slider-val" id="vl-vig">+0</div>
+      </div>
+      <div id="adjust-reset">↺ RESET</div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <div class="ctrl-btn" id="gallery-btn">▣</div>
+    <div class="ctrl-btn" id="timer-btn">⏱</div>
+    <div id="shutter"></div>
+    <div class="ctrl-btn" id="adjust-btn">⊿</div>
+    <div class="ctrl-btn" id="flip-btn">⟲</div>
+  </div>
+
+</div>
+
+<!-- Gallery Drawer -->
+<div id="gallery-tab">
+  <div id="gallery-header">
+    <h2>CARRETE</h2>
+    <div id="close-gallery">FECHAR ✕</div>
+  </div>
+  <div id="gallery-grid"></div>
+</div>
+
+<!-- Gallery Viewer -->
+<div id="gallery-viewer">
+  <div id="viewer-topbar">
+    <div id="viewer-count">1 / 1</div>
+    <div id="viewer-close">✕</div>
+  </div>
+  <div id="viewer-img-wrap">
+    <img id="viewer-img" alt="">
+  </div>
+  <div id="viewer-bottombar">
+    <div id="viewer-filter-name">—</div>
+    <div class="viewer-actions">
+      <div class="viewer-action" id="viewer-delete"><div class="icon">🗑</div><span>DELETAR</span></div>
+      <div class="viewer-action" id="viewer-share"><div class="icon">↗</div><span>SHARE</span></div>
+      <div class="viewer-action" id="viewer-dl"><div class="icon">↓</div><span>SALVAR</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Review -->
+<div id="review">
+  <div id="review-img-wrap"><img id="review-img" alt=""></div>
+  <div id="review-controls">
+    <div class="review-btn" id="discard-btn"><div class="icon">✕</div>DESCARTAR</div>
+    <div class="review-btn" id="save-btn"><div class="icon">↓</div>SALVAR</div>
+    <div class="review-btn" id="back-btn"><div class="icon">📷</div>NOVA FOTO</div>
+  </div>
+</div>
+
+<!-- Permission -->
+<div id="permission-screen">
+  <h1>RETROCAM</h1>
+  <p>Precisamos de acesso à câmera para revelar seus momentos com clima vintage.</p>
+  <div id="grant-btn">ATIVAR CÂMERA</div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+// ── DOM ──────────────────────────────────────────────
+const video   = document.getElementById('video');
+const canvas  = document.getElementById('canvas');
+const ctx     = canvas.getContext('2d', { willReadFrequently: true });
+const dateEl  = document.getElementById('date-stamp');
+const frameCtr= document.getElementById('frame-counter');
+const flashEl = document.getElementById('flash-overlay');
+const shutter = document.getElementById('shutter');
+const flipBtn = document.getElementById('flip-btn');
+const galBtn  = document.getElementById('gallery-btn');
+const galTab  = document.getElementById('gallery-tab');
+const closeGal= document.getElementById('close-gallery');
+const galGrid = document.getElementById('gallery-grid');
+const review  = document.getElementById('review');
+const revImg  = document.getElementById('review-img');
+const discBtn = document.getElementById('discard-btn');
+const saveBtn = document.getElementById('save-btn');
+const backBtn = document.getElementById('back-btn');
+const permScr = document.getElementById('permission-screen');
+const grantBtn= document.getElementById('grant-btn');
+const chips   = document.querySelectorAll('.film-chip');
+const adjPanel= document.getElementById('adjust-panel');
+const adjBtn  = document.getElementById('adjust-btn');
+const timerBtn= document.getElementById('timer-btn');
+const timerInd= document.getElementById('timer-indicator');
+const cdOver  = document.getElementById('countdown-overlay');
+const cdNum   = document.getElementById('countdown-num');
+const viewer  = document.getElementById('gallery-viewer');
+const vImg    = document.getElementById('viewer-img');
+const vCount  = document.getElementById('viewer-count');
+const vClose  = document.getElementById('viewer-close');
+const vName   = document.getElementById('viewer-filter-name');
+const vDel    = document.getElementById('viewer-delete');
+const vShare  = document.getElementById('viewer-share');
+const vDl     = document.getElementById('viewer-dl');
+
+// Sliders
+const SL = {
+  exp:   { sl: document.getElementById('sl-exp'),   vl: document.getElementById('vl-exp')   },
+  con:   { sl: document.getElementById('sl-con'),   vl: document.getElementById('vl-con')   },
+  sat:   { sl: document.getElementById('sl-sat'),   vl: document.getElementById('vl-sat')   },
+  grain: { sl: document.getElementById('sl-grain'), vl: document.getElementById('vl-grain') },
+  vig:   { sl: document.getElementById('sl-vig'),   vl: document.getElementById('vl-vig')   },
+};
+
+// ── STATE ─────────────────────────────────────────────
+let currentFilter = 'kodak';
+let facingMode    = 'environment';
+let stream        = null;
+let rafId         = null;
+let timerOn       = false;
+let timerRunning  = false;
+let adjOpen       = false;
+let viewerIdx     = 0;
+let lastCapture   = null;
+let lastFilterName= '';
+let adj = { exp:1, con:1, sat:1, grain:0, vig:0 };
+let photos = [];
+try { photos = JSON.parse(sessionStorage.getItem('retrocam-photos') || '[]'); } catch(e){}
+let frameCount = 24 - (photos.length % 24) || 24;
+
+// Caches
+let grainC   = document.createElement('canvas');
+let grainCtx = grainC.getContext('2d');
+let vigCache = {};
+
+// ── FILTER DEFINITIONS ────────────────────────────────
+// b=brightness, c=contrast, s=saturate, sp=sepia, h=hue-rotate°, gs=grayscale
+// grain=overlay opacity, vig=vignette strength
+// leak: 'warm'|'cool'|'green'|null
+// Special: chromatic, border, flash, halation, irBoost
+const F = {
+  kodak:      { name:"KODAK '78",    b:1.02,c:1.08,s:1.25,sp:.12,h:0,   gs:0, grain:.06, vig:.45, leak:'warm',  scan:0,    tint:[220,140,60,.06] },
+  polaroid:   { name:"POLAROID",     b:1.12,c:.92, s:.85, sp:.18,h:0,   gs:0, grain:.04, vig:.28, leak:null,    scan:0,    tint:[255,250,230,.08], border:true },
+  vhs:        { name:"VHS CAM",      b:.98, c:1.15,s:1.40,sp:0,  h:-4,  gs:0, grain:.10, vig:.20, leak:null,    scan:.08,  tint:[60,180,255,.04],  chromatic:true },
+  super8:     { name:"SUPER 8",      b:1.08,c:1.12,s:.88, sp:.28,h:0,   gs:0, grain:.14, vig:.42, leak:'warm',  scan:.025, tint:[255,200,100,.09] },
+  disposable: { name:"DISPOSABLE",   b:1.18,c:1.08,s:1.15,sp:0,  h:4,   gs:0, grain:.13, vig:.12, leak:null,    scan:0,    tint:[100,200,100,.05], flash:true },
+  cinestill:  { name:"CINESTILL",    b:.92, c:1.20,s:1.30,sp:0,  h:-12, gs:0, grain:.10, vig:.35, leak:null,    scan:0,    tint:[0,50,130,.07],    halation:true },
+  lomo:       { name:"LOMO LC-A",    b:1.00,c:1.25,s:1.60,sp:0,  h:-6,  gs:0, grain:.05, vig:.62, leak:'warm',  scan:0,    tint:[255,0,120,.04] },
+  cross:      { name:"CROSS PROC",   b:.95, c:1.45,s:1.85,sp:0,  h:22,  gs:0, grain:.07, vig:.45, leak:'cool',  scan:0,    tint:[200,100,255,.05] },
+  sepia:      { name:"SEPIA",        b:.98, c:1.05,s:1.10,sp:.85,h:0,   gs:0, grain:.05, vig:.50, leak:null,    scan:0,    tint:[120,80,30,.05] },
+  noir:       { name:"NOIR",         b:.95, c:1.32,s:0,   sp:0,  h:0,   gs:1, grain:.08, vig:.55, leak:null,    scan:0,    tint:null },
+  daguerro:   { name:"DAGUERRO",     b:.82, c:1.55,s:0,   sp:.18,h:0,   gs:1, grain:.04, vig:.65, leak:null,    scan:0,    tint:[140,175,210,.07] },
+  infrared:   { name:"INFRARED",     b:1.20,c:1.50,s:3.0, sp:0,  h:-60, gs:1, grain:.06, vig:.30, leak:null,    scan:0,    tint:[240,235,210,.03] },
+  natural:    { name:"NATURAL",      b:1,   c:1,   s:1,   sp:0,  h:0,   gs:0, grain:0,   vig:0,   leak:null,    scan:0,    tint:null },
+};
+
+// ── DATE STAMP ────────────────────────────────────────
+function updateDate(){
+  const d = new Date();
+  const m = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+  dateEl.textContent = `${String(d.getDate()).padStart(2,'0')} ${m[d.getMonth()]} ${d.getFullYear()}`;
+}
+updateDate();
+frameCtr.textContent = `EXP. ${frameCount}/24`;
+
+// ── CAMERA ────────────────────────────────────────────
+async function startCamera(){
+  try {
+    if (stream) stream.getTracks().forEach(t=>t.stop());
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode, width:{ideal:1280}, height:{ideal:1706} }, audio:false
+    });
+    video.srcObject = stream;
+    await video.play();
+    permScr.classList.add('hidden');
+    resizeCanvas();
+    if(rafId) cancelAnimationFrame(rafId);
+    renderLoop();
+  } catch(e) {
+    permScr.classList.remove('hidden');
+    document.querySelector('#permission-screen p').textContent =
+      'Câmera não acessível. Verifique as permissões e tente novamente.';
+  }
+}
+
+function resizeCanvas(){
+  canvas.width  = window.innerWidth;
+  canvas.height = document.getElementById('viewfinder').clientHeight;
+  vigCache = {};
+}
+window.addEventListener('resize', resizeCanvas);
+grantBtn.addEventListener('click', startCamera);
+
+// ── CSS FILTER BUILDER ────────────────────────────────
+function buildCSS(f){
+  const b = f.b * adj.exp;
+  const c = f.c * adj.con;
+  const s = Math.max(0, f.s * adj.sat);
+  let css = `brightness(${b.toFixed(3)}) contrast(${c.toFixed(3)}) saturate(${s.toFixed(3)})`;
+  if (f.sp > 0) css += ` sepia(${f.sp})`;
+  if (f.h !== 0) css += ` hue-rotate(${f.h}deg)`;
+  if (f.gs > 0)  css += ` grayscale(${f.gs})`;
+  return css;
+}
+
+// ── EFFECTS ───────────────────────────────────────────
+function getVignette(w, h, strength){
+  const key = `${w}x${h}:${strength.toFixed(2)}`;
+  if (vigCache[key]) return vigCache[key];
+  const vc = document.createElement('canvas');
+  vc.width = w; vc.height = h;
+  const vx = vc.getContext('2d');
+  const g  = vx.createRadialGradient(w/2, h/2, h*.22, w/2, h/2, h*.78);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, `rgba(0,0,0,${strength})`);
+  vx.fillStyle = g;
+  vx.fillRect(0,0,w,h);
+  vigCache[key] = vc;
+  return vc;
+}
+
+function applyGrain(w, h, opacity){
+  if (grainC.width!==w||grainC.height!==h){ grainC.width=w; grainC.height=h; }
+  const d = grainCtx.createImageData(w, h);
+  const b = d.data;
+  // Optimized: work in 4-byte steps
+  for (let i=0; i<b.length; i+=4){
+    const v = (Math.random()*255)|0;
+    b[i]=v; b[i+1]=v; b[i+2]=v; b[i+3]=255;
+  }
+  grainCtx.putImageData(d,0,0);
+  ctx.globalAlpha = opacity;
+  ctx.globalCompositeOperation = 'overlay';
+  ctx.drawImage(grainC,0,0,w,h);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+}
+
+function drawScanlines(w, h, opacity){
+  ctx.globalAlpha = opacity;
+  ctx.fillStyle = '#000';
+  for (let y=0; y<h; y+=3) ctx.fillRect(0,y,w,1);
+  ctx.globalAlpha = 1;
+}
+
+function drawLeak(w, h, style){
+  ctx.globalCompositeOperation = 'screen';
+  let g;
+  if (style==='warm'){
+    g = ctx.createLinearGradient(w,0,w*.18,h*.72);
+    g.addColorStop(0,'rgba(255,145,38,.40)');
+    g.addColorStop(.45,'rgba(255,80,20,.12)');
+    g.addColorStop(1,'rgba(0,0,0,0)');
+  } else if (style==='cool'){
+    g = ctx.createLinearGradient(0,0,w*.85,h*.85);
+    g.addColorStop(0,'rgba(80,120,255,.30)');
+    g.addColorStop(.5,'rgba(60,100,255,.08)');
+    g.addColorStop(1,'rgba(0,0,0,0)');
+  } else if (style==='green'){
+    g = ctx.createLinearGradient(0,h,w*.6,0);
+    g.addColorStop(0,'rgba(60,200,80,.25)');
+    g.addColorStop(.5,'rgba(60,200,80,.06)');
+    g.addColorStop(1,'rgba(0,0,0,0)');
+  }
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,w,h);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawFlash(w, h){
+  // Disposable camera flash: center-biased bright burst
+  const g = ctx.createRadialGradient(w*.44,h*.38,0,w*.44,h*.38,w*.7);
+  g.addColorStop(0,'rgba(255,255,240,.30)');
+  g.addColorStop(.3,'rgba(255,255,240,.10)');
+  g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,w,h);
+}
+
+function drawHalation(w, h){
+  // Cinestill 800T: red bloom around highlights
+  ctx.save();
+  ctx.filter = 'blur(18px) brightness(2.2)';
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = .20;
+  ctx.drawImage(canvas,0,0,w,h);
+  ctx.restore();
+  // warm red overlay in screen
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = .09;
+  ctx.fillStyle = 'rgb(255,50,10)';
+  ctx.fillRect(0,0,w,h);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+}
+
+// ── RENDER LOOP ───────────────────────────────────────
+function renderLoop(){
+  if (video.readyState >= 2){
+    const f  = F[currentFilter];
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const cw = canvas.width,     ch = canvas.height;
+
+    // Cover crop
+    const vR = vw/vh, cR = cw/ch;
+    let sx,sy,sw,sh;
+    if (vR>cR){ sh=vh; sw=vh*cR; sy=0; sx=(vw-sw)/2; }
+    else       { sw=vw; sh=vw/cR; sx=0; sy=(vh-sh)/2; }
+
+    ctx.save();
+    ctx.filter = buildCSS(f);
+    if (facingMode==='user'){ ctx.translate(cw,0); ctx.scale(-1,1); }
+
+    if (f.chromatic){
+      ctx.globalAlpha=.72; ctx.drawImage(video,sx,sy,sw,sh,-2,0,cw,ch);
+      ctx.globalAlpha=.72; ctx.drawImage(video,sx,sy,sw,sh, 2,0,cw,ch);
+      ctx.globalAlpha=1;   ctx.drawImage(video,sx,sy,sw,sh, 0,0,cw,ch);
+    } else {
+      ctx.drawImage(video,sx,sy,sw,sh,0,0,cw,ch);
+    }
+    ctx.restore();
+
+    // Tint
+    if (f.tint){
+      ctx.fillStyle=`rgba(${f.tint[0]},${f.tint[1]},${f.tint[2]},${f.tint[3]})`;
+      ctx.fillRect(0,0,cw,ch);
+    }
+
+    // Special effects
+    if (f.flash)    drawFlash(cw,ch);
+    if (f.halation) drawHalation(cw,ch);
+    if (f.leak)     drawLeak(cw,ch,f.leak);
+
+    // Overlays
+    const vigStr = Math.min(.88, f.vig + adj.vig);
+    if (vigStr > 0) ctx.drawImage(getVignette(cw,ch,vigStr),0,0);
+    const grainAmt = f.grain + adj.grain;
+    if (grainAmt > 0) applyGrain(cw,ch,grainAmt);
+    if (f.scan > 0)   drawScanlines(cw,ch,f.scan);
+  }
+  rafId = requestAnimationFrame(renderLoop);
+}
+
+// ── FILTER SELECT ─────────────────────────────────────
+chips.forEach(c => c.addEventListener('click',()=>{
+  chips.forEach(x=>x.classList.remove('active'));
+  c.classList.add('active');
+  currentFilter = c.dataset.filter;
+}));
+
+// ── FLIP ──────────────────────────────────────────────
+flipBtn.addEventListener('click',()=>{
+  facingMode = facingMode==='environment' ? 'user' : 'environment';
+  startCamera();
+});
+
+// ── ADJUST PANEL ─────────────────────────────────────
+function fmtDelta(v){ return (v>=0?'+':'')+v; }
+
+function updateSliders(){
+  SL.exp.vl.textContent   = fmtDelta(+SL.exp.sl.value   - 100);
+  SL.con.vl.textContent   = fmtDelta(+SL.con.sl.value   - 100);
+  SL.sat.vl.textContent   = fmtDelta(+SL.sat.sl.value   - 100);
+  SL.grain.vl.textContent = '+' + SL.grain.sl.value;
+  SL.vig.vl.textContent   = '+' + SL.vig.sl.value;
+}
+
+SL.exp.sl.addEventListener('input',   e=>{ adj.exp   = +e.target.value/100;   updateSliders(); });
+SL.con.sl.addEventListener('input',   e=>{ adj.con   = +e.target.value/100;   updateSliders(); });
+SL.sat.sl.addEventListener('input',   e=>{ adj.sat   = +e.target.value/100;   updateSliders(); });
+SL.grain.sl.addEventListener('input', e=>{ adj.grain = +e.target.value/1000;  updateSliders(); });
+SL.vig.sl.addEventListener('input',   e=>{ adj.vig   = +e.target.value/125;   updateSliders(); });
+
+document.getElementById('adjust-reset').addEventListener('click',()=>{
+  adj = { exp:1, con:1, sat:1, grain:0, vig:0 };
+  SL.exp.sl.value=100; SL.con.sl.value=100; SL.sat.sl.value=100;
+  SL.grain.sl.value=0; SL.vig.sl.value=0;
+  updateSliders();
+});
+
+adjBtn.addEventListener('click',()=>{
+  adjOpen = !adjOpen;
+  adjPanel.classList.toggle('open', adjOpen);
+  adjBtn.classList.toggle('active-mode', adjOpen);
+});
+
+updateSliders();
+
+// ── TIMER ─────────────────────────────────────────────
+timerBtn.addEventListener('click',()=>{
+  timerOn = !timerOn;
+  timerBtn.classList.toggle('active-mode', timerOn);
+  timerInd.classList.toggle('on', timerOn);
+});
+
+function countdown(){
+  return new Promise(resolve=>{
+    let n = 3;
+    cdOver.classList.add('show');
+    function tick(){
+      cdNum.style.animation='none';
+      void cdNum.offsetWidth;
+      cdNum.style.animation='countIn .8s ease-out';
+      cdNum.textContent = n;
+      if (n > 0){ n--; setTimeout(tick,1000); }
+      else {
+        cdNum.textContent='★';
+        setTimeout(()=>{ cdOver.classList.remove('show'); resolve(); },450);
+      }
+    }
+    tick();
+  });
+}
+
+// ── CAPTURE ───────────────────────────────────────────
+async function doCapture(){
+  if (timerRunning) return;
+  if (timerOn){ timerRunning=true; await countdown(); timerRunning=false; }
+
+  flashEl.style.animation='none';
+  void flashEl.offsetWidth;
+  flashEl.style.animation='flashpop .35s ease-out';
+
+  const f = F[currentFilter];
+  const pad  = f.border ? Math.round(canvas.width*.06) : 0;
+  const padB = f.border ? Math.round(canvas.width*.22) : 0;
+  const out  = document.createElement('canvas');
+  out.width  = canvas.width  + pad*2;
+  out.height = canvas.height + pad + padB;
+  const ox   = out.getContext('2d');
+
+  if (f.border){ ox.fillStyle='#f4efe2'; ox.fillRect(0,0,out.width,out.height); }
+  ox.drawImage(canvas, pad, pad);
+
+  // Burn-in date
+  const fs = Math.round(canvas.width*.032);
+  ox.font         = `italic ${fs}px 'Courier New',monospace`;
+  ox.fillStyle    = 'rgba(255,154,46,.92)';
+  ox.textAlign    = 'right';
+  ox.shadowColor  = 'rgba(0,0,0,.5)';
+  ox.shadowBlur   = 2;
+  ox.fillText(dateEl.textContent, pad+canvas.width-16, pad+canvas.height-16);
+
+  lastCapture    = out.toDataURL('image/jpeg',.92);
+  lastFilterName = f.name;
+  revImg.src     = lastCapture;
+  review.classList.add('show');
+}
+
+shutter.addEventListener('click', doCapture);
+
+// ── REVIEW ────────────────────────────────────────────
+discBtn.addEventListener('click',()=>{ review.classList.remove('show'); lastCapture=null; });
+backBtn.addEventListener('click',()=>{ review.classList.remove('show'); lastCapture=null; });
+
+saveBtn.addEventListener('click',()=>{
+  if (!lastCapture) return;
+  photos.unshift({ src:lastCapture, filter:lastFilterName, ts:Date.now() });
+  try { sessionStorage.setItem('retrocam-photos', JSON.stringify(photos.slice(0,60))); } catch(e){}
+  frameCount = frameCount>1 ? frameCount-1 : 24;
+  frameCtr.textContent = `EXP. ${frameCount}/24`;
+  renderGallery();
+  review.classList.remove('show');
+  lastCapture = null;
+});
+
+// ── GALLERY GRID ──────────────────────────────────────
+function renderGallery(){
+  galGrid.innerHTML='';
+  if (!photos.length){
+    galGrid.innerHTML='<div id="gallery-empty">Nenhuma foto revelada ainda.<br>Bata a primeira!</div>';
+    return;
+  }
+  photos.forEach((p,i)=>{
+    const div = document.createElement('div');
+    div.className='gallery-item';
+    div.innerHTML=`<img src="${p.src}" loading="lazy"><div class="filter-badge">${p.filter||''}</div>`;
+    div.addEventListener('click',()=>openViewer(i));
+    galGrid.appendChild(div);
+  });
+}
+
+galBtn.addEventListener('click',()=>{ renderGallery(); galTab.classList.add('open'); });
+closeGal.addEventListener('click',()=>galTab.classList.remove('open'));
+
+// ── GALLERY VIEWER ────────────────────────────────────
+function openViewer(i){
+  viewerIdx = i;
+  refreshViewer();
+  viewer.classList.add('show');
+}
+
+function refreshViewer(){
+  const p = photos[viewerIdx];
+  if (!p) return;
+  vImg.src  = p.src;
+  vCount.textContent = `${viewerIdx+1} / ${photos.length}`;
+  vName.textContent  = p.filter || 'NATURAL';
+}
+
+vClose.addEventListener('click',()=>viewer.classList.remove('show'));
+
+vDel.addEventListener('click',()=>{
+  photos.splice(viewerIdx,1);
+  try { sessionStorage.setItem('retrocam-photos',JSON.stringify(photos)); } catch(e){}
+  renderGallery();
+  if (!photos.length){ viewer.classList.remove('show'); return; }
+  viewerIdx = Math.min(viewerIdx, photos.length-1);
+  refreshViewer();
+});
+
+vShare.addEventListener('click', async()=>{
+  const p = photos[viewerIdx];
+  if (!p) return;
+  if (navigator.share && navigator.canShare){
+    try {
+      const r = await fetch(p.src);
+      const b = await r.blob();
+      const file = new File([b], `retrocam_${p.ts}.jpg`,{type:'image/jpeg'});
+      if (navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title:'RetroCam'});
+        return;
+      }
+    } catch(e){}
+  }
+  // fallback: download
+  const a=document.createElement('a'); a.href=p.src; a.download=`retrocam_${p.ts}.jpg`; a.click();
+});
+
+vDl.addEventListener('click',()=>{
+  const p=photos[viewerIdx]; if(!p) return;
+  const a=document.createElement('a'); a.href=p.src; a.download=`retrocam_${p.ts}.jpg`; a.click();
+});
+
+// Swipe navigation in viewer
+let swipeX=0;
+const wrap = document.getElementById('viewer-img-wrap');
+wrap.addEventListener('touchstart',e=>{ swipeX=e.touches[0].clientX; },{passive:true});
+wrap.addEventListener('touchend',e=>{
+  const dx = e.changedTouches[0].clientX - swipeX;
+  if (Math.abs(dx)<45) return;
+  if (dx<0 && viewerIdx<photos.length-1){ viewerIdx++; refreshViewer(); }
+  else if (dx>0 && viewerIdx>0){ viewerIdx--; refreshViewer(); }
+},{passive:true});
+
+// ── INIT ──────────────────────────────────────────────
+renderGallery();
+startCamera();
+})();
+</script>
+</body>
+</html>
