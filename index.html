@@ -488,6 +488,7 @@ const F = {
   agfa:       { name:"AGFA VISTA",   b:1.02,c:1.15,s:1.45,sp:0,  h:-10, gs:0, grain:.06, vig:.28, leak:null,    scan:0,    tint:[255,40,90,.05] },
   faded:      { name:"DESBOTADA",    b:1.08,c:.82, s:.70, sp:.12,h:0,   gs:0, grain:.05, vig:.30, leak:null,    scan:0,    tint:[230,220,200,.10] },
   dreamy:     { name:"DREAMY",       b:1.12,c:.92, s:1.05,sp:0,  h:0,   gs:0, grain:.02, vig:.20, leak:null,    scan:0,    tint:[255,220,235,.08], halation:true },
+  toycam:     { name:"TOY CAM",      b:1.02,c:1.16,s:1.50,sp:.04,h:0,   gs:0, grain:.07, vig:.82, leak:'warm',  scan:0,    tint:[255,150,40,.08], halation:true },
 };
 
 // Categoria de cada filtro: analog | film | vintage | creative
@@ -495,7 +496,7 @@ const FILTER_CAT = {
   kodak:'analog', vhs:'analog', super8:'analog', disposable:'analog', handycam:'analog', minidv:'analog', webcam:'analog', natural:'analog',
   polaroid:'film', cinestill:'film', velvia:'film', portrait:'film', portra:'film', gold200:'film', superia:'film', sx70:'film', instax:'film', agfa:'film',
   sepia:'vintage', noir:'vintage', daguerro:'vintage', expired:'vintage', holga:'vintage', faded:'vintage', y2k:'vintage',
-  cross:'creative', lomo:'creative', infrared:'creative', cyanotype:'creative', bleach:'creative', dreamy:'creative',
+  cross:'creative', lomo:'creative', infrared:'creative', cyanotype:'creative', bleach:'creative', dreamy:'creative', toycam:'creative',
 };
 
 // ── DATE STAMP ────────────────────────────────────────
@@ -827,7 +828,7 @@ const swatchColors = {
   holga:'#504030',cyanotype:'#204080',bleach:'#d0d0c8',
   portra:'#e9b48c',gold200:'#e0a030',superia:'#3bb89a',sx70:'#e8c89a',
   instax:'#cfe0ee',handycam:'#3a86d8',minidv:'#5a90c0',webcam:'#9aa2ad',
-  y2k:'#e85ab0',agfa:'#d83258',faded:'#cabfa8',dreamy:'#e8b6cf'
+  y2k:'#e85ab0',agfa:'#d83258',faded:'#cabfa8',dreamy:'#e8b6cf',toycam:'#c8661c'
 };
 
 // Descrições curtas
@@ -848,6 +849,7 @@ const FILTER_DESC = {
   webcam:'Baixa qualidade nostálgica', y2k:'Brilho saturado dos anos 2000',
   agfa:'Vermelhos intensos de filme europeu', faded:'Desbotado e suave',
   dreamy:'Brilho sonhador e etéreo',
+  toycam:'Vinheta forte e brilho quente (Fujifilm Toy Camera)',
 };
 function setFilterDesc(key){
   const el=document.getElementById('filter-desc');
